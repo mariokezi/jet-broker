@@ -15,7 +15,8 @@ function getRedirectUri(): string {
 }
 
 function getAuthority(): string {
-  return `https://login.microsoftonline.com/${env("TENANT_ID")}`;
+  // Use "common" to support both personal Microsoft accounts and org accounts
+  return "https://login.microsoftonline.com/common";
 }
 
 const SCOPES = "openid profile Mail.Read offline_access";
