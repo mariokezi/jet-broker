@@ -3,13 +3,24 @@ import { parseSubject, buildTripKey } from "@/lib/subject-parser";
 import { parseQuoteFromText } from "@/lib/quote-parser";
 import type { RawEmail } from "@/lib/types";
 
+function decodeJwtPayload(token: string): Record<string, unknown> | null {
+  try {
+    const parts = token.split(".");
+    if (parts.length !== 3) return null;
+    const payload = Buffer.from(parts[1], "base64url").toString("utf8");
+    return JSON.parse(payload);
+  } catch {
+    return null;
+  }
+}
+
 export async function GET() {
   const result: Record<string, unknown> = {};
 
   // Step 1: Get refresh token
   const rt = await getStoredRefreshToken();
   if (!rt) {
-    result.step1_auth = "FAIL — No refresh token. You need to click Connect Outlook and sign in again.";
+    result.step1_auth = "FAIL — No refresh token. Click Connect Outlook and sign in again.";
     return Response.json(result);
   }
   result.step1_auth = "OK — refresh token found";
@@ -20,6 +31,17 @@ export async function GET() {
     const tokens = await refreshForAccessToken(rt);
     accessToken = tokens.accessToken;
     result.step2_token = "OK — got access token";
+
+    // Decode token to check scopes and audience
+    const payload = decodeJwtPayload(accessToken);
+    if (payload) {
+      result.step2_token_details = {
+        audience: payload.aud,
+        scopes: payload.scp,
+        issuer: payload.iss,
+        expiresAt: payload.exp,
+      };
+    }
   } catch (err) {
     result.step2_token = `FAIL — ${err instanceof Error ? err.message : String(err)}`;
     return Response.json(result);
@@ -35,6 +57,16 @@ export async function GET() {
     if (!res.ok) {
       const body = await res.text();
       result.step3_fetch = `FAIL — Graph API ${res.status}: ${body}`;
+
+      // If 401, try with /me/mailfolders to see if basic access works
+      const testRes = await fetch(
+        "https://graph.microsoft.com/v1.0/me",
+        { headers: { Authorization: `Bearer ${accessToken}` }, cache: "no-store" }
+      );
+      result.step3_me_test = testRes.ok
+        ? `GET /me works — status ${testRes.status}`
+        : `GET /me also fails — status ${testRes.status}`;
+
       return Response.json(result);
     }
     const data = await res.json();
