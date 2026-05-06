@@ -1,7 +1,7 @@
 import "server-only";
 import { fetchQuoteEmails } from "./o365-client";
 import { parseSubject, buildTripKey } from "./subject-parser";
-import { parseQuoteFromText } from "./quote-parser";
+import { parseQuoteFromText, parseQuoteFromPDF } from "./quote-parser";
 import { getAirportName } from "./airport-lookup";
 import type { Trip, ParsedQuote, RawEmail, UnmatchedEmail } from "./types";
 
@@ -12,7 +12,41 @@ function generateTripId(): string {
   return `BCF${String(tripCounter).padStart(3, "0")}`;
 }
 
-function processEmail(email: RawEmail): ParsedQuote {
+async function extractPdfText(base64Data: string): Promise<string | null> {
+  try {
+    const { PDFParse } = await import("pdf-parse");
+    const data = new Uint8Array(Buffer.from(base64Data, "base64"));
+    const parser = new PDFParse({ data });
+    const result = await parser.getText();
+    await parser.destroy();
+    return result.text;
+  } catch (err) {
+    console.error("[extractPdfText] Failed to parse PDF:", err);
+    return null;
+  }
+}
+
+async function processEmail(email: RawEmail): Promise<ParsedQuote> {
+  // Check for PDF attachments and extract text
+  for (const attachment of email.attachments) {
+    if (
+      attachment.contentType === "application/pdf" ||
+      attachment.filename?.toLowerCase().endsWith(".pdf")
+    ) {
+      // Attachment URL is a data URI with base64 content from Graph API
+      const base64Match = attachment.url.match(/^data:[^;]+;base64,(.+)$/);
+      if (base64Match) {
+        const pdfText = await extractPdfText(base64Match[1]);
+        if (pdfText && pdfText.trim().length > 10) {
+          console.log(`[processEmail] Extracted ${pdfText.length} chars from PDF: ${attachment.filename}`);
+          // Combine email body text with PDF text for parsing
+          const combined = parseQuoteFromPDF(email, pdfText);
+          return combined;
+        }
+      }
+    }
+  }
+
   return parseQuoteFromText(email);
 }
 
@@ -37,7 +71,7 @@ export async function buildTrips(): Promise<{
       continue;
     }
 
-    const quote = processEmail(email);
+    const quote = await processEmail(email);
 
     if (!tripMap.has(key)) {
       tripMap.set(key, {
