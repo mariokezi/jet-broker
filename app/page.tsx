@@ -1,6 +1,7 @@
 import { buildTrips } from "@/lib/trip-builder";
 import { TripOverviewTable } from "@/components/trip-overview-table";
 import { EmailConnectionStatus } from "@/components/email-connection-status";
+import { AutoRefresh } from "@/components/auto-refresh";
 import { Plane } from "lucide-react";
 
 export const dynamic = "force-dynamic";
@@ -30,6 +31,8 @@ export default async function OverviewPage() {
 
       {/* Main content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <AutoRefresh intervalMs={60_000} />
+
         <div className="flex items-center justify-between mb-6">
           <div>
             <h2 className="text-xl font-semibold text-white">
