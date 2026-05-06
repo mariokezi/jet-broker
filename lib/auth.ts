@@ -2,17 +2,22 @@ import "server-only";
 import { cookies } from "next/headers";
 import crypto from "crypto";
 
-const CLIENT_ID = process.env.CLIENT_ID!;
-const TENANT_ID = process.env.TENANT_ID!;
-const CLIENT_SECRET = process.env.CLIENT_SECRET!;
-const COOKIE_SECRET = process.env.COOKIE_SECRET!;
+function env(name: string): string {
+  const val = process.env[name];
+  if (!val) throw new Error(`Missing env var: ${name}`);
+  return val;
+}
 
-const REDIRECT_URI =
-  process.env.NEXT_PUBLIC_APP_URL
+function getRedirectUri(): string {
+  return process.env.NEXT_PUBLIC_APP_URL
     ? `${process.env.NEXT_PUBLIC_APP_URL}/api/auth/callback`
     : "http://localhost:3000/api/auth/callback";
+}
 
-const AUTHORITY = `https://login.microsoftonline.com/${TENANT_ID}`;
+function getAuthority(): string {
+  return `https://login.microsoftonline.com/${env("TENANT_ID")}`;
+}
+
 const SCOPES = "openid profile Mail.Read offline_access";
 
 // --- Encryption helpers for cookie storage ---
@@ -20,7 +25,7 @@ const SCOPES = "openid profile Mail.Read offline_access";
 const ALGORITHM = "aes-256-gcm";
 
 function getKey(): Buffer {
-  return Buffer.from(COOKIE_SECRET, "hex");
+  return Buffer.from(env("COOKIE_SECRET"), "hex");
 }
 
 function encrypt(text: string): string {
@@ -80,25 +85,25 @@ export function encryptTokens(tokens: TokenData): string {
 
 export function getAuthUrl(state: string): string {
   const params = new URLSearchParams({
-    client_id: CLIENT_ID,
+    client_id: env("CLIENT_ID"),
     response_type: "code",
-    redirect_uri: REDIRECT_URI,
+    redirect_uri: getRedirectUri(),
     scope: SCOPES,
     response_mode: "query",
     state,
   });
-  return `${AUTHORITY}/oauth2/v2.0/authorize?${params}`;
+  return `${getAuthority()}/oauth2/v2.0/authorize?${params}`;
 }
 
 export async function exchangeCodeForTokens(code: string): Promise<TokenData> {
-  const res = await fetch(`${AUTHORITY}/oauth2/v2.0/token`, {
+  const res = await fetch(`${getAuthority()}/oauth2/v2.0/token`, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({
-      client_id: CLIENT_ID,
-      client_secret: CLIENT_SECRET,
+      client_id: env("CLIENT_ID"),
+      client_secret: env("CLIENT_SECRET"),
       code,
-      redirect_uri: REDIRECT_URI,
+      redirect_uri: getRedirectUri(),
       grant_type: "authorization_code",
       scope: SCOPES,
     }),
@@ -118,12 +123,12 @@ export async function exchangeCodeForTokens(code: string): Promise<TokenData> {
 }
 
 export async function refreshAccessToken(refreshToken: string): Promise<TokenData> {
-  const res = await fetch(`${AUTHORITY}/oauth2/v2.0/token`, {
+  const res = await fetch(`${getAuthority()}/oauth2/v2.0/token`, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({
-      client_id: CLIENT_ID,
-      client_secret: CLIENT_SECRET,
+      client_id: env("CLIENT_ID"),
+      client_secret: env("CLIENT_SECRET"),
       refresh_token: refreshToken,
       grant_type: "refresh_token",
       scope: SCOPES,
@@ -147,17 +152,12 @@ export async function getValidAccessToken(): Promise<string | null> {
   const tokens = await getStoredTokens();
   if (!tokens) return null;
 
-  // If token still valid (with 2 min buffer), return it
   if (tokens.expiresAt > Date.now() + 120_000) {
     return tokens.accessToken;
   }
 
-  // Try refresh
   try {
     const refreshed = await refreshAccessToken(tokens.refreshToken);
-    // We can't set cookies from a utility function in server components,
-    // so we return the new access token and the caller should update the cookie
-    // For simplicity, we'll just return the refreshed token
     return refreshed.accessToken;
   } catch {
     return null;
@@ -165,5 +165,5 @@ export async function getValidAccessToken(): Promise<string | null> {
 }
 
 export function isConfigured(): boolean {
-  return !!(CLIENT_ID && TENANT_ID && CLIENT_SECRET && COOKIE_SECRET);
+  return !!(process.env.CLIENT_ID && process.env.TENANT_ID && process.env.CLIENT_SECRET && process.env.COOKIE_SECRET);
 }
