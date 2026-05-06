@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/table";
 import { formatDistanceToNow, parseISO } from "date-fns";
 import type { Trip, UnmatchedEmail } from "@/lib/types";
-import { formatPriceRange, getIATACode } from "@/lib/trip-builder";
+import { formatPriceRange, getIATACode } from "@/lib/format-utils";
 import { ArrowUpDown, Plane, AlertTriangle } from "lucide-react";
 import { useState } from "react";
 

@@ -1,26 +1,148 @@
+import "server-only";
 import { seedEmails } from "./seed-data";
+import { getStoredTokens, refreshAccessToken, encryptTokens } from "./auth";
 import type { RawEmail } from "./types";
 
-/**
- * PHASE 2: Replace this with live Microsoft Graph API calls.
- *
- * Required Azure AD setup:
- *   1. Register an app at portal.azure.com → App registrations.
- *   2. Add API permission: Microsoft Graph → Delegated → Mail.Read
- *      (READ-ONLY — do not request Mail.ReadWrite).
- *   3. Grant admin consent.
- *   4. Set redirect URI to your Vercel URL.
- *   5. Store CLIENT_ID, TENANT_ID, CLIENT_SECRET as Vercel env vars.
- *
- * Live implementation outline:
- *   const token = await getAccessToken(); // MSAL flow
- *   const res = await fetch(
- *     'https://graph.microsoft.com/v1.0/me/messages?$filter=receivedDateTime ge ' +
- *     '<since>&$top=100&$select=subject,body,from,receivedDateTime,attachments',
- *     { headers: { Authorization: `Bearer ${token}` } }
- *   );
- */
+interface GraphMessage {
+  id: string;
+  subject: string;
+  from: { emailAddress: { name: string; address: string } };
+  receivedDateTime: string;
+  body: { contentType: string; content: string };
+  hasAttachments: boolean;
+}
+
+interface GraphAttachment {
+  id: string;
+  name: string;
+  contentType: string;
+  contentBytes?: string;
+  isInline: boolean;
+}
+
+async function getWorkingToken(): Promise<{ token: string; cookieValue: string | null }> {
+  const tokens = await getStoredTokens();
+  if (!tokens) throw new Error("No tokens");
+
+  // Still valid
+  if (tokens.expiresAt > Date.now() + 120_000) {
+    return { token: tokens.accessToken, cookieValue: null };
+  }
+
+  // Refresh
+  const refreshed = await refreshAccessToken(tokens.refreshToken);
+  return { token: refreshed.accessToken, cookieValue: encryptTokens(refreshed) };
+}
+
+async function fetchGraphMessages(accessToken: string): Promise<GraphMessage[]> {
+  const allMessages: GraphMessage[] = [];
+  let nextUrl: string =
+    "https://graph.microsoft.com/v1.0/me/messages?" +
+    "$top=100&$orderby=receivedDateTime desc" +
+    "&$select=id,subject,from,receivedDateTime,body,hasAttachments";
+
+  let hasMore = true;
+  while (hasMore) {
+    const res: Response = await fetch(nextUrl, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+      cache: "no-store",
+    });
+
+    if (!res.ok) {
+      const errBody = await res.text();
+      console.error(`Graph API error ${res.status}: ${errBody}`);
+      throw new Error(`Graph API error: ${res.status}`);
+    }
+
+    const data = await res.json();
+    allMessages.push(...(data.value ?? []));
+
+    // Follow pagination (up to 500 messages total)
+    const link: string | undefined = data["@odata.nextLink"];
+    if (link && allMessages.length < 500) {
+      nextUrl = link;
+    } else {
+      hasMore = false;
+    }
+  }
+
+  return allMessages;
+}
+
+async function fetchAttachments(accessToken: string, messageId: string): Promise<GraphAttachment[]> {
+  const res = await fetch(
+    `https://graph.microsoft.com/v1.0/me/messages/${messageId}/attachments?$select=id,name,contentType,contentBytes,isInline`,
+    {
+      headers: { Authorization: `Bearer ${accessToken}` },
+      cache: "no-store",
+    }
+  );
+
+  if (!res.ok) return [];
+  const data = await res.json();
+  return data.value ?? [];
+}
+
+function graphToRawEmail(msg: GraphMessage, attachments: GraphAttachment[]): RawEmail {
+  const bodyType = msg.body.contentType === "html" ? "html" : "text";
+
+  return {
+    id: msg.id,
+    subject: msg.subject ?? "(no subject)",
+    from: msg.from?.emailAddress?.address ?? "",
+    fromName: msg.from?.emailAddress?.name ?? "",
+    receivedAt: msg.receivedDateTime,
+    bodyType,
+    body: msg.body.content ?? "",
+    attachments: attachments
+      .filter((a) => !a.isInline && a.contentBytes)
+      .map((a) => ({
+        filename: a.name,
+        contentType: a.contentType,
+        url: `data:${a.contentType};base64,${a.contentBytes}`,
+      })),
+  };
+}
+
 export async function fetchQuoteEmails(): Promise<RawEmail[]> {
-  // DEMO: returns seeded mock emails
-  return seedEmails;
+  // Check if we have a live connection
+  let accessToken: string | null = null;
+  try {
+    const result = await getWorkingToken();
+    accessToken = result.token;
+  } catch {
+    // No valid tokens — fall back to seed data
+  }
+
+  if (!accessToken) {
+    return seedEmails;
+  }
+
+  // Fetch real emails from Microsoft Graph
+  try {
+    const messages = await fetchGraphMessages(accessToken);
+
+    const rawEmails: RawEmail[] = [];
+    for (const msg of messages) {
+      let attachments: GraphAttachment[] = [];
+      if (msg.hasAttachments) {
+        attachments = await fetchAttachments(accessToken, msg.id);
+      }
+      rawEmails.push(graphToRawEmail(msg, attachments));
+    }
+
+    return rawEmails;
+  } catch (err) {
+    console.error("Failed to fetch from Graph, falling back to seed data:", err);
+    return seedEmails;
+  }
+}
+
+export async function isLiveConnected(): Promise<boolean> {
+  try {
+    const tokens = await getStoredTokens();
+    return tokens !== null;
+  } catch {
+    return false;
+  }
 }

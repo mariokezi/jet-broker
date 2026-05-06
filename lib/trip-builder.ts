@@ -1,7 +1,8 @@
+import "server-only";
 import { fetchQuoteEmails } from "./o365-client";
 import { parseSubject, buildTripKey } from "./subject-parser";
 import { parseQuoteFromText, parseQuoteFromPDF } from "./quote-parser";
-import { getAirportName, getIATA } from "./airport-lookup";
+import { getAirportName } from "./airport-lookup";
 import { pdfQuoteTexts } from "./seed-data";
 import type { Trip, ParsedQuote, RawEmail, UnmatchedEmail } from "./types";
 
@@ -83,28 +84,4 @@ export async function buildTrips(): Promise<{
   trips.sort((a, b) => a.date.localeCompare(b.date));
 
   return { trips, unmatched };
-}
-
-export function formatPriceRange(quotes: ParsedQuote[]): string {
-  const prices = quotes
-    .map((q) => q.price)
-    .filter((p): p is number => p !== null)
-    .sort((a, b) => a - b);
-
-  if (prices.length === 0) return "N/A";
-  if (prices.length === 1) return formatPrice(prices[0]);
-
-  return `${formatPrice(prices[0])} – ${formatPrice(prices[prices.length - 1])}`;
-}
-
-function formatPrice(price: number): string {
-  if (price >= 1000) {
-    const k = Math.round(price / 1000);
-    return `$${k}k`;
-  }
-  return `$${price.toLocaleString()}`;
-}
-
-export function getIATACode(icao: string): string {
-  return getIATA(icao);
 }
