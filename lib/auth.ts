@@ -20,7 +20,7 @@ function getAuthority(): string {
 
 const SCOPES = "openid profile Mail.Read offline_access";
 
-// --- Encryption helpers for cookie storage ---
+// --- Encryption helpers ---
 
 const ALGORITHM = "aes-256-gcm";
 
@@ -54,31 +54,22 @@ function decrypt(data: string): string | null {
   }
 }
 
-// --- Token types ---
+// --- Cookie storage (refresh token only — keeps cookie small) ---
 
-export interface TokenData {
-  accessToken: string;
-  refreshToken: string;
-  expiresAt: number; // unix ms
-}
-
-// --- Cookie-based token storage ---
-
-export async function getStoredTokens(): Promise<TokenData | null> {
+export async function getStoredRefreshToken(): Promise<string | null> {
   const cookieStore = await cookies();
-  const raw = cookieStore.get("ms_tokens")?.value;
+  const raw = cookieStore.get("ms_rt")?.value;
   if (!raw) return null;
-  const decrypted = decrypt(raw);
-  if (!decrypted) return null;
-  try {
-    return JSON.parse(decrypted) as TokenData;
-  } catch {
-    return null;
-  }
+  return decrypt(raw);
 }
 
-export function encryptTokens(tokens: TokenData): string {
-  return encrypt(JSON.stringify(tokens));
+export function encryptRefreshToken(refreshToken: string): string {
+  return encrypt(refreshToken);
+}
+
+export function buildTokenCookie(refreshToken: string): string {
+  const encrypted = encryptRefreshToken(refreshToken);
+  return `ms_rt=${encrypted}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=${30 * 24 * 60 * 60}`;
 }
 
 // --- OAuth URLs ---
@@ -95,7 +86,7 @@ export function getAuthUrl(state: string): string {
   return `${getAuthority()}/oauth2/v2.0/authorize?${params}`;
 }
 
-export async function exchangeCodeForTokens(code: string): Promise<TokenData> {
+export async function exchangeCodeForTokens(code: string): Promise<{ accessToken: string; refreshToken: string }> {
   const res = await fetch(`${getAuthority()}/oauth2/v2.0/token`, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -118,11 +109,10 @@ export async function exchangeCodeForTokens(code: string): Promise<TokenData> {
   return {
     accessToken: data.access_token,
     refreshToken: data.refresh_token,
-    expiresAt: Date.now() + data.expires_in * 1000,
   };
 }
 
-export async function refreshAccessToken(refreshToken: string): Promise<TokenData> {
+export async function refreshForAccessToken(refreshToken: string): Promise<{ accessToken: string; refreshToken: string }> {
   const res = await fetch(`${getAuthority()}/oauth2/v2.0/token`, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -144,21 +134,16 @@ export async function refreshAccessToken(refreshToken: string): Promise<TokenDat
   return {
     accessToken: data.access_token,
     refreshToken: data.refresh_token ?? refreshToken,
-    expiresAt: Date.now() + data.expires_in * 1000,
   };
 }
 
 export async function getValidAccessToken(): Promise<string | null> {
-  const tokens = await getStoredTokens();
-  if (!tokens) return null;
-
-  if (tokens.expiresAt > Date.now() + 120_000) {
-    return tokens.accessToken;
-  }
+  const refreshToken = await getStoredRefreshToken();
+  if (!refreshToken) return null;
 
   try {
-    const refreshed = await refreshAccessToken(tokens.refreshToken);
-    return refreshed.accessToken;
+    const result = await refreshForAccessToken(refreshToken);
+    return result.accessToken;
   } catch {
     return null;
   }

@@ -6,7 +6,7 @@ export async function GET() {
 
   response.headers.append(
     "Set-Cookie",
-    `ms_tokens=; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=0`
+    `ms_rt=; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=0`
   );
 
   return response;

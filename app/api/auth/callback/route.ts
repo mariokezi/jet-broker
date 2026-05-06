@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { exchangeCodeForTokens, encryptTokens } from "@/lib/auth";
+import { exchangeCodeForTokens, buildTokenCookie } from "@/lib/auth";
 
 export async function GET(request: NextRequest) {
   const code = request.nextUrl.searchParams.get("code");
@@ -19,33 +19,21 @@ export async function GET(request: NextRequest) {
   }
 
   if (!code) {
-    return new Response(
-      `<html><body style="font-family:system-ui;padding:40px;background:#0f172a;color:white">
-        <h2>Missing authorization code</h2>
-        <a href="/" style="color:#60a5fa">Back to dashboard</a>
-      </body></html>`,
-      { status: 400, headers: { "Content-Type": "text/html" } }
-    );
+    return new Response("Missing authorization code", { status: 400 });
   }
 
   try {
-    const tokens = await exchangeCodeForTokens(code);
-    const encrypted = encryptTokens(tokens);
+    const { refreshToken } = await exchangeCodeForTokens(code);
+    const cookie = buildTokenCookie(refreshToken);
 
-    // Check cookie size — browsers reject cookies over ~4KB
-    const cookieValue = `ms_tokens=${encrypted}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=${30 * 24 * 60 * 60}`;
-    console.log(`Token cookie size: ${cookieValue.length} bytes`);
-
-    if (cookieValue.length > 4000) {
-      console.warn("Token cookie exceeds 4KB, may be rejected by browser");
-    }
+    console.log(`Refresh token cookie size: ${cookie.length} bytes`);
 
     const response = new Response(null, {
       status: 302,
       headers: { Location: "/" },
     });
 
-    response.headers.append("Set-Cookie", cookieValue);
+    response.headers.append("Set-Cookie", cookie);
     response.headers.append(
       "Set-Cookie",
       `oauth_state=; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=0`

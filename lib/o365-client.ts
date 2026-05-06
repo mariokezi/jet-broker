@@ -1,6 +1,6 @@
 import "server-only";
 import { seedEmails } from "./seed-data";
-import { getStoredTokens, refreshAccessToken, encryptTokens } from "./auth";
+import { getValidAccessToken } from "./auth";
 import type { RawEmail } from "./types";
 
 interface GraphMessage {
@@ -20,19 +20,7 @@ interface GraphAttachment {
   isInline: boolean;
 }
 
-async function getWorkingToken(): Promise<{ token: string; cookieValue: string | null }> {
-  const tokens = await getStoredTokens();
-  if (!tokens) throw new Error("No tokens");
-
-  // Still valid
-  if (tokens.expiresAt > Date.now() + 120_000) {
-    return { token: tokens.accessToken, cookieValue: null };
-  }
-
-  // Refresh
-  const refreshed = await refreshAccessToken(tokens.refreshToken);
-  return { token: refreshed.accessToken, cookieValue: encryptTokens(refreshed) };
-}
+// (token fetching handled by getValidAccessToken in auth.ts)
 
 async function fetchGraphMessages(accessToken: string): Promise<GraphMessage[]> {
   const allMessages: GraphMessage[] = [];
@@ -108,8 +96,7 @@ export async function fetchQuoteEmails(): Promise<RawEmail[]> {
   // Check if we have a live connection
   let accessToken: string | null = null;
   try {
-    const result = await getWorkingToken();
-    accessToken = result.token;
+    accessToken = await getValidAccessToken();
   } catch {
     // No valid tokens — fall back to seed data
   }
@@ -140,8 +127,8 @@ export async function fetchQuoteEmails(): Promise<RawEmail[]> {
 
 export async function isLiveConnected(): Promise<boolean> {
   try {
-    const tokens = await getStoredTokens();
-    return tokens !== null;
+    const token = await getValidAccessToken();
+    return token !== null;
   } catch {
     return false;
   }

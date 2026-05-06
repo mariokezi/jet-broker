@@ -1,9 +1,6 @@
-import { getStoredTokens } from "@/lib/auth";
+import { getStoredRefreshToken } from "@/lib/auth";
 
 export async function GET() {
-  const tokens = await getStoredTokens();
-  return Response.json({
-    connected: tokens !== null,
-    expiresAt: tokens?.expiresAt ?? null,
-  });
+  const rt = await getStoredRefreshToken();
+  return Response.json({ connected: rt !== null });
 }
