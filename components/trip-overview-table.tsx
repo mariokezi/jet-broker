@@ -1,19 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { Badge } from "@/components/ui/badge";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { formatDistanceToNow, parseISO } from "date-fns";
 import type { Trip, UnmatchedEmail } from "@/lib/types";
 import { formatPriceRange, getIATACode } from "@/lib/format-utils";
-import { ArrowUpDown, Plane, AlertTriangle } from "lucide-react";
+import { ArrowUpDown, Plane, AlertTriangle, ChevronRight } from "lucide-react";
 import { useState } from "react";
 
 type SortField = "tripId" | "route" | "date" | "quotes" | "priceRange" | "updated" | "status";
@@ -62,85 +53,72 @@ export function TripOverviewTable({ trips, unmatched }: TripOverviewTableProps) 
     }
   });
 
-  const SortHeader = ({ field, children }: { field: SortField; children: React.ReactNode }) => (
-    <TableHead
-      className="cursor-pointer select-none hover:bg-muted/50 text-xs"
-      onClick={() => toggleSort(field)}
-    >
-      <div className="flex items-center gap-1">
-        {children}
-        <ArrowUpDown className="h-3 w-3 opacity-50" />
-      </div>
-    </TableHead>
-  );
-
   return (
     <div className="space-y-6">
-      <div className="rounded-md border">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <SortHeader field="tripId">Trip ID</SortHeader>
-              <SortHeader field="route">Route</SortHeader>
-              <SortHeader field="date">Date</SortHeader>
-              <SortHeader field="quotes">Quotes</SortHeader>
-              <SortHeader field="priceRange">Price Range</SortHeader>
-              <SortHeader field="updated">Updated</SortHeader>
-              <SortHeader field="status">Status</SortHeader>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {sorted.map((trip) => (
-              <TableRow key={trip.tripId} className="hover:bg-muted/30">
-                <TableCell className="font-medium">
-                  <Link
-                    href={`/trip/${trip.tripId}`}
-                    className="text-blue-600 hover:underline"
-                  >
-                    {trip.tripId}
-                  </Link>
-                </TableCell>
-                <TableCell>
+      {/* Trip cards */}
+      <div className="grid gap-3">
+        {sorted.map((trip) => (
+          <Link
+            key={trip.tripId}
+            href={`/trip/${trip.tripId}`}
+            className="group rounded-xl border border-white/5 bg-white/[0.02] hover:bg-white/[0.05] hover:border-white/10 transition-all p-5"
+          >
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-blue-600/10 border border-blue-500/10">
+                  <Plane className="h-4 w-4 text-blue-400" />
+                </div>
+                <div>
                   <div className="flex items-center gap-2">
-                    <Plane className="h-3.5 w-3.5 text-muted-foreground" />
-                    <span className="font-medium">
+                    <span className="font-semibold text-white text-sm">
                       {trip.origin} → {trip.destination}
                     </span>
-                    <span className="text-muted-foreground text-xs">
-                      ({getIATACode(trip.origin)}→{getIATACode(trip.destination)})
+                    <span className="text-xs text-white/30">
+                      {getIATACode(trip.origin)}→{getIATACode(trip.destination)}
+                    </span>
+                    <span className="text-[10px] font-mono text-white/20 bg-white/5 rounded px-1.5 py-0.5">
+                      {trip.tripId}
                     </span>
                   </div>
-                </TableCell>
-                <TableCell className="text-sm">{trip.date}</TableCell>
-                <TableCell>
-                  <Badge variant="secondary" className="font-normal">
-                    {trip.quotes.length}
-                  </Badge>
-                </TableCell>
-                <TableCell className="font-medium text-sm">
-                  {formatPriceRange(trip.quotes)}
-                </TableCell>
-                <TableCell className="text-muted-foreground text-sm">
-                  {formatDistanceToNow(parseISO(trip.lastUpdated), { addSuffix: true })}
-                </TableCell>
-                <TableCell>
-                  <Badge
-                    variant="outline"
-                    className="bg-emerald-50 text-emerald-700 border-emerald-200 font-normal"
-                  >
+                  <div className="flex items-center gap-3 mt-1 text-xs text-white/40">
+                    <span>{trip.originName} to {trip.destinationName}</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-6">
+                <div className="text-right">
+                  <div className="text-sm font-semibold text-white">
+                    {formatPriceRange(trip.quotes)}
+                  </div>
+                  <div className="text-xs text-white/40 mt-0.5">
+                    {trip.quotes.length} quotes
+                  </div>
+                </div>
+
+                <div className="text-right hidden sm:block">
+                  <div className="text-sm text-white/60">{trip.date}</div>
+                  <div className="text-xs text-white/30 mt-0.5">
+                    {formatDistanceToNow(parseISO(trip.lastUpdated), { addSuffix: true })}
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <span className="inline-flex items-center rounded-full bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-0.5 text-xs font-medium text-emerald-400">
                     {trip.status}
-                  </Badge>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+                  </span>
+                  <ChevronRight className="h-4 w-4 text-white/20 group-hover:text-white/50 transition-colors" />
+                </div>
+              </div>
+            </div>
+          </Link>
+        ))}
       </div>
 
       {/* Unmatched emails section */}
-      <div className="rounded-md border p-4">
-        <div className="flex items-center gap-2 text-sm font-medium">
-          <AlertTriangle className="h-4 w-4 text-amber-500" />
+      <div className="rounded-xl border border-white/5 bg-white/[0.02] p-5">
+        <div className="flex items-center gap-2 text-sm font-medium text-white/60">
+          <AlertTriangle className="h-4 w-4 text-amber-400/60" />
           Unmatched Emails ({unmatched.length})
         </div>
         {unmatched.length > 0 ? (
@@ -148,19 +126,19 @@ export function TripOverviewTable({ trips, unmatched }: TripOverviewTableProps) 
             {unmatched.map((u) => (
               <div
                 key={u.email.id}
-                className="text-sm flex justify-between items-center py-2 border-b last:border-b-0"
+                className="text-sm flex justify-between items-center py-2 border-b border-white/5 last:border-b-0"
               >
                 <div>
-                  <span className="font-medium">{u.email.subject}</span>
-                  <span className="text-muted-foreground ml-2">from {u.email.fromName}</span>
+                  <span className="font-medium text-white/80">{u.email.subject}</span>
+                  <span className="text-white/30 ml-2">from {u.email.fromName}</span>
                 </div>
-                <span className="text-xs text-muted-foreground">{u.reason}</span>
+                <span className="text-xs text-white/30">{u.reason}</span>
               </div>
             ))}
           </div>
         ) : (
-          <p className="text-sm text-muted-foreground mt-1">
-            All emails were successfully matched to trips.
+          <p className="text-sm text-white/30 mt-1">
+            All emails matched to trips.
           </p>
         )}
       </div>

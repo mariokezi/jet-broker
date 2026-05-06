@@ -1,20 +1,19 @@
-import { Badge } from "@/components/ui/badge";
 import { MessageCircle, Clock } from "lucide-react";
 
 export function StatusBadge({ status }: { status: "Accepted" | "Unanswered" }) {
   if (status === "Accepted") {
     return (
-      <Badge variant="default" className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100 gap-1 font-normal">
+      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 text-xs font-medium text-emerald-400">
         <MessageCircle className="h-3 w-3" />
         Accepted
-      </Badge>
+      </span>
     );
   }
 
   return (
-    <Badge variant="secondary" className="gap-1 font-normal">
+    <span className="inline-flex items-center gap-1 rounded-full bg-white/5 border border-white/10 px-2 py-0.5 text-xs font-medium text-white/50">
       <Clock className="h-3 w-3" />
       Unanswered
-    </Badge>
+    </span>
   );
 }

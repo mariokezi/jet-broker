@@ -8,8 +8,8 @@ const CLIENT_SECRET = process.env.CLIENT_SECRET!;
 const COOKIE_SECRET = process.env.COOKIE_SECRET!;
 
 const REDIRECT_URI =
-  process.env.VERCEL_URL
-    ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}/api/auth/callback`
+  process.env.NEXT_PUBLIC_APP_URL
+    ? `${process.env.NEXT_PUBLIC_APP_URL}/api/auth/callback`
     : "http://localhost:3000/api/auth/callback";
 
 const AUTHORITY = `https://login.microsoftonline.com/${TENANT_ID}`;

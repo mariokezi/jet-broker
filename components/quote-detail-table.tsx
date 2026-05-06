@@ -1,15 +1,6 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { Input } from "@/components/ui/input";
 import { ArrowUpDown, ExternalLink, X, Search, Link as LinkIcon } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { AircraftThumbnail } from "./aircraft-thumbnail";
@@ -110,149 +101,152 @@ export function QuoteDetailTable({ quotes }: QuoteDetailTableProps) {
     children: React.ReactNode;
     className?: string;
   }) => (
-    <TableHead
-      className={`cursor-pointer select-none hover:bg-muted/50 text-xs whitespace-nowrap ${className ?? ""}`}
+    <th
+      className={`cursor-pointer select-none px-3 py-3 text-left text-xs font-medium text-white/40 uppercase tracking-wider hover:text-white/60 transition-colors whitespace-nowrap ${className ?? ""}`}
       onClick={() => toggleSort(field)}
     >
       <div className="flex items-center gap-1">
         {children}
-        <ArrowUpDown className="h-3 w-3 opacity-50" />
+        <ArrowUpDown className="h-3 w-3 opacity-40" />
       </div>
-    </TableHead>
+    </th>
   );
 
   return (
     <div className="space-y-4">
+      {/* Filter */}
       <div className="relative max-w-sm">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-        <Input
-          placeholder="Filter by aircraft, operator, or tail number..."
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-white/30" />
+        <input
+          placeholder="Filter by aircraft, operator, or tail..."
           value={filter}
           onChange={(e) => setFilter(e.target.value)}
-          className="pl-9 text-sm"
+          className="w-full rounded-xl border border-white/10 bg-white/5 pl-9 pr-4 py-2.5 text-sm text-white placeholder:text-white/25 outline-none focus:border-blue-500/50 focus:ring-2 focus:ring-blue-500/20 transition-all"
         />
       </div>
 
-      <div className="rounded-md border">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <SortHeader field="status">Status</SortHeader>
-              <SortHeader field="price">Price</SortHeader>
-              <SortHeader field="aircraft">Aircraft</SortHeader>
-              <SortHeader field="maxPax">Max PAX</SortHeader>
-              <SortHeader field="yom">YOM</SortHeader>
-              <SortHeader field="refurb">Refurb (I/E)</SortHeader>
-              <SortHeader field="totalHours">Tot.</SortHeader>
-              <SortHeader field="operator">Seller</SortHeader>
-              <SortHeader field="updated">Updated</SortHeader>
-              <SortHeader field="faa">FAA</SortHeader>
-              <TableHead className="text-xs w-10"></TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {sorted.map((quote) => (
-              <TableRow
-                key={quote.emailId}
-                className="cursor-pointer hover:bg-muted/30 group"
-                onClick={() => handleRowClick(quote)}
-              >
-                <TableCell>
-                  <div className="flex items-center gap-2">
-                    <AircraftThumbnail className="h-6 w-10 text-muted-foreground hidden sm:block" />
-                    <StatusBadge status={quote.status} />
-                  </div>
-                </TableCell>
-                <TableCell className="font-semibold text-sm">
-                  {quote.quoteSource === "external" ? (
-                    <a
-                      href={quote.externalLink ?? "#"}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-blue-600 hover:underline flex items-center gap-1"
-                      onClick={(e) => e.stopPropagation()}
+      {/* Table */}
+      <div className="rounded-xl border border-white/5 overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead>
+              <tr className="border-b border-white/5 bg-white/[0.02]">
+                <SortHeader field="status">Status</SortHeader>
+                <SortHeader field="price">Price</SortHeader>
+                <SortHeader field="aircraft">Aircraft</SortHeader>
+                <SortHeader field="maxPax">Max PAX</SortHeader>
+                <SortHeader field="yom">YOM</SortHeader>
+                <SortHeader field="refurb">Refurb (I/E)</SortHeader>
+                <SortHeader field="totalHours">Tot.</SortHeader>
+                <SortHeader field="operator">Seller</SortHeader>
+                <SortHeader field="updated">Updated</SortHeader>
+                <SortHeader field="faa">FAA</SortHeader>
+                <th className="w-10 px-3 py-3"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {sorted.map((quote) => (
+                <tr
+                  key={quote.emailId}
+                  className="border-b border-white/[0.03] cursor-pointer hover:bg-white/[0.03] group transition-colors"
+                  onClick={() => handleRowClick(quote)}
+                >
+                  <td className="px-3 py-3">
+                    <div className="flex items-center gap-2">
+                      <AircraftThumbnail className="h-6 w-10 text-white/20 hidden sm:block" />
+                      <StatusBadge status={quote.status} />
+                    </div>
+                  </td>
+                  <td className="px-3 py-3 font-semibold text-sm text-white">
+                    {quote.quoteSource === "external" ? (
+                      <a
+                        href={quote.externalLink ?? "#"}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-blue-400 hover:text-blue-300 flex items-center gap-1"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <LinkIcon className="h-3.5 w-3.5" />
+                        View Portal
+                      </a>
+                    ) : quote.priceFormatted ? (
+                      quote.priceFormatted
+                    ) : (
+                      <span className="text-white/20">&mdash;</span>
+                    )}
+                  </td>
+                  <td className="px-3 py-3">
+                    <span className="text-blue-400 text-sm font-medium">
+                      {quote.aircraft ?? <span className="text-white/20">&mdash;</span>}
+                    </span>
+                  </td>
+                  <td className="px-3 py-3 text-sm text-white/60">
+                    {quote.maxPax ?? <span className="text-white/20">&mdash;</span>}
+                  </td>
+                  <td className="px-3 py-3 text-sm text-white/60">
+                    {quote.yom ?? <span className="text-white/20">&mdash;</span>}
+                  </td>
+                  <td className="px-3 py-3 text-sm text-white/60">
+                    {quote.refurbInterior || quote.refurbExterior ? (
+                      `${quote.refurbInterior ?? "\u2014"}/${quote.refurbExterior ?? "\u2014"}`
+                    ) : (
+                      <span className="text-white/20">&mdash;</span>
+                    )}
+                  </td>
+                  <td className="px-3 py-3 text-sm text-white/60">
+                    {quote.totalHours ? (
+                      `${quote.totalHours.toLocaleString()} hrs`
+                    ) : (
+                      <span className="text-white/20">&mdash;</span>
+                    )}
+                  </td>
+                  <td className="px-3 py-3">
+                    <span className="text-blue-400 text-sm font-medium">
+                      {quote.operator ?? <span className="text-white/20">&mdash;</span>}
+                    </span>
+                  </td>
+                  <td className="px-3 py-3 text-white/40 text-sm">
+                    {format(parseISO(quote.receivedAt), "MM/dd/yy")}
+                  </td>
+                  <td className="px-3 py-3">
+                    {quote.tailNumber ? (
+                      <a
+                        href={faaUrl(quote.tailNumber)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-white/30 hover:text-blue-400 transition-colors"
+                        onClick={(e) => e.stopPropagation()}
+                        title={`FAA Registry: ${quote.tailNumber}`}
+                      >
+                        <ExternalLink className="h-3.5 w-3.5" />
+                      </a>
+                    ) : (
+                      <span className="text-white/20">&mdash;</span>
+                    )}
+                  </td>
+                  <td className="px-3 py-3">
+                    <button
+                      className="opacity-0 group-hover:opacity-100 transition-opacity text-white/30 hover:text-red-400"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                      }}
+                      title="Cancel quote"
                     >
-                      <LinkIcon className="h-3.5 w-3.5" />
-                      View Portal
-                    </a>
-                  ) : quote.priceFormatted ? (
-                    quote.priceFormatted
-                  ) : (
-                    <span className="text-muted-foreground">&mdash;</span>
-                  )}
-                </TableCell>
-                <TableCell>
-                  <span className="text-blue-600 text-sm font-medium">
-                    {quote.aircraft ?? <span className="text-muted-foreground">&mdash;</span>}
-                  </span>
-                </TableCell>
-                <TableCell className="text-sm">
-                  {quote.maxPax ?? <span className="text-muted-foreground">&mdash;</span>}
-                </TableCell>
-                <TableCell className="text-sm">
-                  {quote.yom ?? <span className="text-muted-foreground">&mdash;</span>}
-                </TableCell>
-                <TableCell className="text-sm">
-                  {quote.refurbInterior || quote.refurbExterior ? (
-                    `${quote.refurbInterior ?? "—"}/${quote.refurbExterior ?? "—"}`
-                  ) : (
-                    <span className="text-muted-foreground">&mdash;</span>
-                  )}
-                </TableCell>
-                <TableCell className="text-sm">
-                  {quote.totalHours ? (
-                    `${quote.totalHours.toLocaleString()} hrs`
-                  ) : (
-                    <span className="text-muted-foreground">&mdash;</span>
-                  )}
-                </TableCell>
-                <TableCell>
-                  <span className="text-blue-600 text-sm font-medium">
-                    {quote.operator ?? <span className="text-muted-foreground">&mdash;</span>}
-                  </span>
-                </TableCell>
-                <TableCell className="text-muted-foreground text-sm">
-                  {format(parseISO(quote.receivedAt), "MM/dd/yy")}
-                </TableCell>
-                <TableCell>
-                  {quote.tailNumber ? (
-                    <a
-                      href={faaUrl(quote.tailNumber)}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-muted-foreground hover:text-foreground"
-                      onClick={(e) => e.stopPropagation()}
-                      title={`FAA Registry: ${quote.tailNumber}`}
-                    >
-                      <ExternalLink className="h-3.5 w-3.5" />
-                    </a>
-                  ) : (
-                    <span className="text-muted-foreground">&mdash;</span>
-                  )}
-                </TableCell>
-                <TableCell>
-                  <button
-                    className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      // Cancel action placeholder
-                    }}
-                    title="Cancel quote"
-                  >
-                    <X className="h-4 w-4" />
-                  </button>
-                </TableCell>
-              </TableRow>
-            ))}
-            {sorted.length === 0 && (
-              <TableRow>
-                <TableCell colSpan={11} className="text-center text-muted-foreground py-8">
-                  No quotes match your filter.
-                </TableCell>
-              </TableRow>
-            )}
-          </TableBody>
-        </Table>
+                      <X className="h-4 w-4" />
+                    </button>
+                  </td>
+                </tr>
+              ))}
+              {sorted.length === 0 && (
+                <tr>
+                  <td colSpan={11} className="text-center text-white/30 py-12">
+                    No quotes match your filter.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       <EmailDrawer
