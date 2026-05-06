@@ -1,9 +1,8 @@
 import "server-only";
 import { fetchQuoteEmails } from "./o365-client";
 import { parseSubject, buildTripKey } from "./subject-parser";
-import { parseQuoteFromText, parseQuoteFromPDF } from "./quote-parser";
+import { parseQuoteFromText } from "./quote-parser";
 import { getAirportName } from "./airport-lookup";
-import { pdfQuoteTexts } from "./seed-data";
 import type { Trip, ParsedQuote, RawEmail, UnmatchedEmail } from "./types";
 
 let tripCounter = 0;
@@ -14,16 +13,6 @@ function generateTripId(): string {
 }
 
 function processEmail(email: RawEmail): ParsedQuote {
-  // Check if this email has PDF attachments with known text
-  for (const attachment of email.attachments) {
-    if (attachment.contentType === "application/pdf") {
-      const pdfText = pdfQuoteTexts[attachment.filename];
-      if (pdfText) {
-        return parseQuoteFromPDF(email, pdfText);
-      }
-    }
-  }
-
   return parseQuoteFromText(email);
 }
 
@@ -32,6 +21,8 @@ export async function buildTrips(): Promise<{
   unmatched: UnmatchedEmail[];
 }> {
   const emails = await fetchQuoteEmails();
+  console.log(`[buildTrips] Processing ${emails.length} emails`);
+
   const tripMap = new Map<string, { origin: string; destination: string; date: string; quotes: ParsedQuote[] }>();
   const unmatched: UnmatchedEmail[] = [];
 
@@ -80,8 +71,8 @@ export async function buildTrips(): Promise<{
     });
   }
 
-  // Sort trips by date
   trips.sort((a, b) => a.date.localeCompare(b.date));
 
+  console.log(`[buildTrips] Result: ${trips.length} trips, ${unmatched.length} unmatched`);
   return { trips, unmatched };
 }

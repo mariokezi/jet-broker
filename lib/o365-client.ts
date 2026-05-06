@@ -1,5 +1,4 @@
 import "server-only";
-import { seedEmails } from "./seed-data";
 import { getValidAccessToken } from "./auth";
 import type { RawEmail } from "./types";
 
@@ -19,8 +18,6 @@ interface GraphAttachment {
   contentBytes?: string;
   isInline: boolean;
 }
-
-// (token fetching handled by getValidAccessToken in auth.ts)
 
 async function fetchGraphMessages(accessToken: string): Promise<GraphMessage[]> {
   const allMessages: GraphMessage[] = [];
@@ -45,7 +42,6 @@ async function fetchGraphMessages(accessToken: string): Promise<GraphMessage[]> 
     const data = await res.json();
     allMessages.push(...(data.value ?? []));
 
-    // Follow pagination (up to 500 messages total)
     const link: string | undefined = data["@odata.nextLink"];
     if (link && allMessages.length < 500) {
       nextUrl = link;
@@ -93,21 +89,21 @@ function graphToRawEmail(msg: GraphMessage, attachments: GraphAttachment[]): Raw
 }
 
 export async function fetchQuoteEmails(): Promise<RawEmail[]> {
-  // Check if we have a live connection
   let accessToken: string | null = null;
   try {
     accessToken = await getValidAccessToken();
   } catch {
-    // No valid tokens — fall back to seed data
+    // Not connected
   }
 
   if (!accessToken) {
-    return seedEmails;
+    console.log("[fetchQuoteEmails] No access token — returning empty list");
+    return [];
   }
 
-  // Fetch real emails from Microsoft Graph
   try {
     const messages = await fetchGraphMessages(accessToken);
+    console.log(`[fetchQuoteEmails] Fetched ${messages.length} emails from Graph API`);
 
     const rawEmails: RawEmail[] = [];
     for (const msg of messages) {
@@ -120,8 +116,8 @@ export async function fetchQuoteEmails(): Promise<RawEmail[]> {
 
     return rawEmails;
   } catch (err) {
-    console.error("Failed to fetch from Graph, falling back to seed data:", err);
-    return seedEmails;
+    console.error("Failed to fetch from Graph:", err);
+    return [];
   }
 }
 

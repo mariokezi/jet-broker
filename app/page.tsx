@@ -1,12 +1,14 @@
 import { buildTrips } from "@/lib/trip-builder";
+import { isLiveConnected } from "@/lib/o365-client";
 import { TripOverviewTable } from "@/components/trip-overview-table";
 import { EmailConnectionStatus } from "@/components/email-connection-status";
 import { AutoRefresh } from "@/components/auto-refresh";
-import { Plane } from "lucide-react";
+import { Plane, MailWarning } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
 export default async function OverviewPage() {
+  const connected = await isLiveConnected();
   const { trips, unmatched } = await buildTrips();
 
   return (
@@ -43,6 +45,16 @@ export default async function OverviewPage() {
             </p>
           </div>
         </div>
+
+        {!connected && trips.length === 0 && unmatched.length === 0 && (
+          <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-8 text-center mb-6">
+            <MailWarning className="h-10 w-10 text-amber-400/60 mx-auto mb-3" />
+            <h3 className="text-lg font-medium text-white mb-1">Outlook not connected</h3>
+            <p className="text-sm text-white/40 max-w-md mx-auto">
+              Click <strong>Connect Outlook</strong> above to link your email. Once connected, quote emails will appear here automatically.
+            </p>
+          </div>
+        )}
 
         <TripOverviewTable trips={trips} unmatched={unmatched} />
       </main>
