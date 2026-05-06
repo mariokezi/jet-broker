@@ -9,6 +9,7 @@ export function proxy(request: NextRequest) {
     pathname.startsWith("/api/auth") ||
     pathname.startsWith("/api/login") ||
     pathname.startsWith("/api/debug") ||
+    pathname.startsWith("/api/diagnose") ||
     pathname.startsWith("/_next") ||
     pathname.startsWith("/favicon") ||
     pathname.endsWith(".svg") ||
