@@ -1,0 +1,48 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>
+endobj
+4 0 obj
+<< /Length 804 >>
+stream
+BT /F1 10 Tf 50 700 Td (AEM AVIATION) Tj ET
+BT /F1 10 Tf 50 686 Td (Charter Quote) Tj ET
+BT /F1 10 Tf 50 672 Td () Tj ET
+BT /F1 10 Tf 50 658 Td (Route: KTEB to KPBI) Tj ET
+BT /F1 10 Tf 50 644 Td (Date: May 15, 2026) Tj ET
+BT /F1 10 Tf 50 630 Td () Tj ET
+BT /F1 10 Tf 50 616 Td (Aircraft: Citation M2) Tj ET
+BT /F1 10 Tf 50 602 Td (Tail: N210AE) Tj ET
+BT /F1 10 Tf 50 588 Td (YOM: 2017) Tj ET
+BT /F1 10 Tf 50 574 Td (Max passengers: 6) Tj ET
+BT /F1 10 Tf 50 560 Td (Total time: 890 hrs) Tj ET
+BT /F1 10 Tf 50 546 Td (Interior/Exterior refurb: 2024/2023) Tj ET
+BT /F1 10 Tf 50 532 Td () Tj ET
+BT /F1 10 Tf 50 518 Td (Price: $21,750) Tj ET
+BT /F1 10 Tf 50 504 Td () Tj ET
+BT /F1 10 Tf 50 490 Td (All prices include fuel, crew, and FET.) Tj ET
+BT /F1 10 Tf 50 476 Td (Contact: info@aemaviation.example) Tj ET
+endstream
+endobj
+5 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+xref
+0 6
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000115 00000 n 
+0000000241 00000 n 
+0000001096 00000 n 
+trailer
+<< /Size 6 /Root 1 0 R >>
+startxref
+1166
+%%EOF

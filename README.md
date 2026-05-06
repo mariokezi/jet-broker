@@ -1,36 +1,44 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Jet Broker — Quote Aggregator
 
-## Getting Started
+A Next.js dashboard for private jet brokers to aggregate, compare, and manage charter quote emails. The app automatically parses incoming quote emails (plain text, HTML, and PDF), groups them by trip (route + date), and presents an Avinode-style comparison table with sortable columns, FAA registry lookups, and full email previews.
 
-First, run the development server:
+## Quickstart
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000). No environment variables are required for the demo.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Deploy to Vercel
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+1. Push this repo to GitHub.
+2. Import the repo at [vercel.com/new](https://vercel.com/new).
+3. Use default settings — no environment variables needed for the demo.
+4. Deploy.
 
-## Learn More
+## Connecting to Office 365 (Phase 2)
 
-To learn more about Next.js, take a look at the following resources:
+To connect a real Office 365 inbox and pull quote emails via Microsoft Graph:
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+1. Register an app at portal.azure.com → App registrations.
+2. Add API permission: **Microsoft Graph → Delegated → Mail.Read** (READ-ONLY — do not request Mail.ReadWrite).
+3. Grant admin consent.
+4. Set redirect URI to your Vercel URL.
+5. Store `CLIENT_ID`, `TENANT_ID`, `CLIENT_SECRET` as Vercel env vars.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Then implement the live Graph API calls in `lib/o365-client.ts` — the rest of the app is already wired to use `fetchQuoteEmails()` as its only data source.
 
-## Deploy on Vercel
+## Adding New Airports
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Edit `lib/airport-lookup.ts` to add entries to the `airports` array. Each entry needs:
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- `icao` — 4-letter ICAO code (e.g., `KTEB`)
+- `iata` — 3-letter IATA code (e.g., `TEB`)
+- `name` — Human-readable airport name
+- `aliases` — Array of lowercase city/name aliases for subject-line matching
+
+## Customizing the Quote Parser
+
+The quote extraction logic lives in `lib/quote-parser.ts`. Functions like `extractPrice`, `extractAircraft`, `extractTailNumber`, etc. use regex patterns to pull structured data from email bodies. Add new patterns or adjust existing ones to handle additional email formats from operators.
