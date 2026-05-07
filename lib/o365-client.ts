@@ -161,8 +161,9 @@ export async function fetchQuoteEmails(): Promise<RawEmail[]> {
   }
 
   if (!accessToken) {
-    console.log("[fetchQuoteEmails] No access token");
-    return [];
+    console.log("[fetchQuoteEmails] No access token — using seed data");
+    const { loadSeedEmails } = await import("./seed-data");
+    return loadSeedEmails();
   }
 
   try {

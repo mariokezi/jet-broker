@@ -1,4 +1,33 @@
 import type { RawEmail } from "./types";
+import { readFileSync } from "fs";
+import { join } from "path";
+
+/**
+ * Load seed emails with PDF attachments converted to base64 data URIs
+ * so the parsing pipeline can process them the same as live Outlook emails.
+ */
+export function loadSeedEmails(): RawEmail[] {
+  return seedEmails.map((email) => ({
+    ...email,
+    attachments: email.attachments.map((att) => {
+      // Convert public file paths to base64 data URIs
+      if (att.url.startsWith("/") && !att.url.startsWith("data:")) {
+        try {
+          const filePath = join(process.cwd(), "public", att.url);
+          const buffer = readFileSync(filePath);
+          const base64 = buffer.toString("base64");
+          return {
+            ...att,
+            url: `data:${att.contentType};base64,${base64}`,
+          };
+        } catch (err) {
+          console.error(`[seed-data] Could not read ${att.url}:`, err);
+        }
+      }
+      return att;
+    }),
+  }));
+}
 
 export const seedEmails: RawEmail[] = [
   // ============================================================
