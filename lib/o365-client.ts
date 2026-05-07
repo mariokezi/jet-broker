@@ -1,6 +1,6 @@
 import "server-only";
 import { getValidAccessToken } from "./auth";
-import type { RawEmail } from "./types";
+import type { RawEmail, EmailAttachment } from "./types";
 
 interface GraphMessage {
   id: string;
@@ -17,6 +17,7 @@ interface GraphAttachment {
   contentType: string;
   contentBytes?: string;
   isInline: boolean;
+  size?: number;
 }
 
 async function fetchGraphMessages(accessToken: string): Promise<GraphMessage[]> {
@@ -35,7 +36,7 @@ async function fetchGraphMessages(accessToken: string): Promise<GraphMessage[]> 
 
     if (!res.ok) {
       const errBody = await res.text();
-      console.error(`Graph API error ${res.status}: ${errBody}`);
+      console.error(`[Graph] messages error ${res.status}: ${errBody}`);
       throw new Error(`Graph API error: ${res.status}`);
     }
 
@@ -53,21 +54,90 @@ async function fetchGraphMessages(accessToken: string): Promise<GraphMessage[]> 
   return allMessages;
 }
 
-async function fetchAttachments(accessToken: string, messageId: string): Promise<GraphAttachment[]> {
+async function fetchAttachmentContent(
+  accessToken: string,
+  messageId: string,
+  attachmentId: string
+): Promise<string | null> {
+  try {
+    const res = await fetch(
+      `https://graph.microsoft.com/v1.0/me/messages/${messageId}/attachments/${attachmentId}/$value`,
+      {
+        headers: { Authorization: `Bearer ${accessToken}` },
+        cache: "no-store",
+      }
+    );
+    if (!res.ok) {
+      console.error(`[Graph] attachment content download failed: ${res.status}`);
+      return null;
+    }
+    const buffer = await res.arrayBuffer();
+    return Buffer.from(buffer).toString("base64");
+  } catch (err) {
+    console.error(`[Graph] attachment content download error:`, err);
+    return null;
+  }
+}
+
+async function fetchAttachments(
+  accessToken: string,
+  messageId: string
+): Promise<GraphAttachment[]> {
   const res = await fetch(
-    `https://graph.microsoft.com/v1.0/me/messages/${messageId}/attachments?$select=id,name,contentType,contentBytes,isInline`,
+    `https://graph.microsoft.com/v1.0/me/messages/${messageId}/attachments?$select=id,name,contentType,contentBytes,isInline,size`,
     {
       headers: { Authorization: `Bearer ${accessToken}` },
       cache: "no-store",
     }
   );
 
-  if (!res.ok) return [];
+  if (!res.ok) {
+    console.error(`[Graph] attachments list failed: ${res.status}`);
+    return [];
+  }
   const data = await res.json();
   return data.value ?? [];
 }
 
-function graphToRawEmail(msg: GraphMessage, attachments: GraphAttachment[]): RawEmail {
+async function buildEmailAttachments(
+  accessToken: string,
+  messageId: string,
+  graphAttachments: GraphAttachment[]
+): Promise<EmailAttachment[]> {
+  const result: EmailAttachment[] = [];
+
+  for (const att of graphAttachments) {
+    if (att.isInline) continue;
+
+    let base64Content = att.contentBytes ?? null;
+
+    // If contentBytes is missing, download via $value endpoint
+    if (!base64Content) {
+      console.log(`[Graph] contentBytes missing for "${att.name}", downloading via $value...`);
+      base64Content = await fetchAttachmentContent(accessToken, messageId, att.id);
+    }
+
+    if (!base64Content) {
+      console.warn(`[Graph] Could not get content for attachment "${att.name}" — skipping`);
+      continue;
+    }
+
+    console.log(`[Graph] Got attachment "${att.name}" (${att.contentType}, ${base64Content.length} base64 chars)`);
+
+    result.push({
+      filename: att.name,
+      contentType: att.contentType,
+      url: `data:${att.contentType};base64,${base64Content}`,
+    });
+  }
+
+  return result;
+}
+
+function graphToRawEmail(
+  msg: GraphMessage,
+  attachments: EmailAttachment[]
+): RawEmail {
   const bodyType = msg.body.contentType === "html" ? "html" : "text";
 
   return {
@@ -78,13 +148,7 @@ function graphToRawEmail(msg: GraphMessage, attachments: GraphAttachment[]): Raw
     receivedAt: msg.receivedDateTime,
     bodyType,
     body: msg.body.content ?? "",
-    attachments: attachments
-      .filter((a) => !a.isInline && a.contentBytes)
-      .map((a) => ({
-        filename: a.name,
-        contentType: a.contentType,
-        url: `data:${a.contentType};base64,${a.contentBytes}`,
-      })),
+    attachments,
   };
 }
 
@@ -97,26 +161,28 @@ export async function fetchQuoteEmails(): Promise<RawEmail[]> {
   }
 
   if (!accessToken) {
-    console.log("[fetchQuoteEmails] No access token — returning empty list");
+    console.log("[fetchQuoteEmails] No access token");
     return [];
   }
 
   try {
     const messages = await fetchGraphMessages(accessToken);
-    console.log(`[fetchQuoteEmails] Fetched ${messages.length} emails from Graph API`);
+    console.log(`[fetchQuoteEmails] Fetched ${messages.length} emails`);
 
     const rawEmails: RawEmail[] = [];
     for (const msg of messages) {
-      let attachments: GraphAttachment[] = [];
+      let emailAttachments: EmailAttachment[] = [];
       if (msg.hasAttachments) {
-        attachments = await fetchAttachments(accessToken, msg.id);
+        const graphAtts = await fetchAttachments(accessToken, msg.id);
+        console.log(`[fetchQuoteEmails] "${msg.subject}" has ${graphAtts.length} attachment(s)`);
+        emailAttachments = await buildEmailAttachments(accessToken, msg.id, graphAtts);
       }
-      rawEmails.push(graphToRawEmail(msg, attachments));
+      rawEmails.push(graphToRawEmail(msg, emailAttachments));
     }
 
     return rawEmails;
   } catch (err) {
-    console.error("Failed to fetch from Graph:", err);
+    console.error("[fetchQuoteEmails] Failed:", err);
     return [];
   }
 }

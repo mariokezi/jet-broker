@@ -114,22 +114,31 @@ function extractTripInfo(
 }
 
 async function processEmail(email: RawEmail): Promise<{ quote: ParsedQuote; pdfText: string | null }> {
-  // Check for PDF attachments and extract text
+  console.log(`[processEmail] "${email.subject}" — ${email.attachments.length} attachment(s)`);
+
   for (const attachment of email.attachments) {
-    if (
-      attachment.contentType === "application/pdf" ||
-      attachment.filename?.toLowerCase().endsWith(".pdf")
-    ) {
-      const base64Match = attachment.url.match(/^data:[^;]+;base64,(.+)$/);
-      if (base64Match) {
-        const pdfText = await extractPdfText(base64Match[1]);
-        if (pdfText && pdfText.trim().length > 10) {
-          console.log(`[processEmail] Extracted ${pdfText.length} chars from PDF: ${attachment.filename}`);
-          const quote = parseQuoteFromPDF(email, pdfText);
-          return { quote, pdfText };
-        }
-      }
+    const isPdf = attachment.contentType === "application/pdf" ||
+      attachment.filename?.toLowerCase().endsWith(".pdf");
+
+    if (!isPdf) continue;
+
+    console.log(`[processEmail] Found PDF: "${attachment.filename}" (${attachment.url.length} chars in data URI)`);
+
+    const base64Match = attachment.url.match(/^data:[^;]+;base64,(.+)$/);
+    if (!base64Match) {
+      console.error(`[processEmail] Could not extract base64 from data URI for "${attachment.filename}"`);
+      continue;
     }
+
+    const pdfText = await extractPdfText(base64Match[1]);
+    if (!pdfText || pdfText.trim().length <= 10) {
+      console.error(`[processEmail] PDF text extraction returned empty for "${attachment.filename}"`);
+      continue;
+    }
+
+    console.log(`[processEmail] Extracted ${pdfText.length} chars from PDF "${attachment.filename}": ${pdfText.slice(0, 150)}...`);
+    const quote = parseQuoteFromPDF(email, pdfText);
+    return { quote, pdfText };
   }
 
   return { quote: parseQuoteFromText(email), pdfText: null };

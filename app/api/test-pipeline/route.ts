@@ -1,120 +1,137 @@
 import { getStoredRefreshToken, refreshForAccessToken } from "@/lib/auth";
 import { parseSubject, buildTripKey } from "@/lib/subject-parser";
-import { parseQuoteFromText } from "@/lib/quote-parser";
-import type { RawEmail } from "@/lib/types";
+import { resolveToICAO } from "@/lib/airport-lookup";
 
 export async function GET() {
   const result: Record<string, unknown> = {};
 
-  // Step 1: Get refresh token
   const rt = await getStoredRefreshToken();
   if (!rt) {
-    result.step1_auth = "FAIL — No refresh token. Click Connect Outlook and sign in again.";
+    result.error = "No refresh token. Click Connect Outlook.";
     return Response.json(result);
   }
-  result.step1_auth = "OK";
 
-  // Step 2: Get access token
   let accessToken: string;
   try {
     const tokens = await refreshForAccessToken(rt);
     accessToken = tokens.accessToken;
-    result.step2_token = "OK";
+    result.auth = "OK";
   } catch (err) {
-    result.step2_token = `FAIL — ${err instanceof Error ? err.message : String(err)}`;
+    result.auth = `FAIL: ${err instanceof Error ? err.message : String(err)}`;
     return Response.json(result);
   }
 
-  // Step 3: Fetch emails with attachments info
-  interface GraphEmail {
-    id: string;
-    subject: string;
-    from: { emailAddress: { name: string; address: string } };
-    receivedDateTime: string;
-    body: { contentType: string; content: string };
-    hasAttachments: boolean;
-  }
-
-  let emails: GraphEmail[];
-  try {
-    const res = await fetch(
-      "https://graph.microsoft.com/v1.0/me/messages?$top=10&$orderby=receivedDateTime desc&$select=id,subject,from,receivedDateTime,body,hasAttachments",
-      { headers: { Authorization: `Bearer ${accessToken}` }, cache: "no-store" }
-    );
-    if (!res.ok) {
-      const body = await res.text();
-      result.step3_fetch = `FAIL — Graph API ${res.status}: ${body}`;
-      return Response.json(result);
-    }
-    const data = await res.json();
-    emails = data.value ?? [];
-    result.step3_fetch = `OK — ${emails.length} emails`;
-  } catch (err) {
-    result.step3_fetch = `FAIL — ${err instanceof Error ? err.message : String(err)}`;
+  // Fetch emails
+  const msgRes = await fetch(
+    "https://graph.microsoft.com/v1.0/me/messages?$top=10&$orderby=receivedDateTime desc&$select=id,subject,from,receivedDateTime,body,hasAttachments",
+    { headers: { Authorization: `Bearer ${accessToken}` }, cache: "no-store" }
+  );
+  if (!msgRes.ok) {
+    result.emails = `FAIL: ${msgRes.status}`;
     return Response.json(result);
   }
+  const msgData = await msgRes.json();
+  const messages = msgData.value ?? [];
+  result.emailCount = messages.length;
 
-  // Step 4: Parse each email and check attachments
-  const parsed = [];
-  for (const e of emails) {
-    const subjectParsed = parseSubject(e.subject);
-    const tripKey = buildTripKey(subjectParsed);
+  const emailResults = [];
+  for (const msg of messages) {
+    const entry: Record<string, unknown> = {
+      subject: msg.subject,
+      from: msg.from?.emailAddress?.address,
+      hasAttachments: msg.hasAttachments,
+    };
 
-    // Check for attachments
-    let attachmentInfo: string[] = [];
-    if (e.hasAttachments) {
-      try {
-        const attRes = await fetch(
-          `https://graph.microsoft.com/v1.0/me/messages/${e.id}/attachments?$select=id,name,contentType,size,isInline`,
-          { headers: { Authorization: `Bearer ${accessToken}` }, cache: "no-store" }
-        );
-        if (attRes.ok) {
-          const attData = await attRes.json();
-          attachmentInfo = (attData.value ?? []).map((a: { name: string; contentType: string; size: number; isInline: boolean }) =>
-            `${a.name} (${a.contentType}, ${a.size} bytes, inline=${a.isInline})`
-          );
+    // Parse subject
+    const parsed = parseSubject(msg.subject);
+    entry.subjectParsed = {
+      origin: parsed.origin,
+      destination: parsed.destination,
+      date: parsed.date,
+      tripKey: buildTripKey(parsed) ?? "NO MATCH",
+    };
+
+    // Check attachments
+    if (msg.hasAttachments) {
+      const attRes = await fetch(
+        `https://graph.microsoft.com/v1.0/me/messages/${msg.id}/attachments?$select=id,name,contentType,size,isInline,contentBytes`,
+        { headers: { Authorization: `Bearer ${accessToken}` }, cache: "no-store" }
+      );
+      if (attRes.ok) {
+        const attData = await attRes.json();
+        const atts = attData.value ?? [];
+        entry.attachments = atts.map((a: { name: string; contentType: string; size: number; isInline: boolean; contentBytes?: string }) => ({
+          name: a.name,
+          type: a.contentType,
+          size: a.size,
+          inline: a.isInline,
+          hasContentBytes: !!a.contentBytes,
+          contentBytesLength: a.contentBytes?.length ?? 0,
+        }));
+
+        // Try filename route extraction
+        for (const a of atts) {
+          const upper = a.name.toUpperCase();
+          const match = upper.match(/([A-Z]{3,4})\s*[-_>\s]\s*([A-Z]{3,4})/);
+          if (match) {
+            const o = resolveToICAO(match[1]);
+            const d = resolveToICAO(match[2]);
+            if (o && d) {
+              entry.filenameRoute = `${o} -> ${d}`;
+            }
+          }
+
+          // Try PDF text extraction
+          if (a.contentType === "application/pdf" || a.name?.toLowerCase().endsWith(".pdf")) {
+            let base64: string | null = a.contentBytes ?? null;
+            if (!base64) {
+              // Download via $value
+              const dlRes = await fetch(
+                `https://graph.microsoft.com/v1.0/me/messages/${msg.id}/attachments/${a.id}/$value`,
+                { headers: { Authorization: `Bearer ${accessToken}` }, cache: "no-store" }
+              );
+              if (dlRes.ok) {
+                const buf = await dlRes.arrayBuffer();
+                base64 = Buffer.from(buf).toString("base64");
+                entry.pdfDownloaded = true;
+                entry.pdfBase64Length = base64.length;
+              } else {
+                entry.pdfDownloadError = dlRes.status;
+              }
+            } else {
+              entry.pdfBase64Length = base64.length;
+            }
+
+            if (base64) {
+              try {
+                const { PDFParse } = await import("pdf-parse");
+                const data = new Uint8Array(Buffer.from(base64, "base64"));
+                const parser = new PDFParse({ data });
+                const textResult = await parser.getText();
+                await parser.destroy();
+                entry.pdfText = textResult.text.slice(0, 500);
+                entry.pdfTextLength = textResult.text.length;
+
+                // Try parsing route+date from PDF text
+                const pdfParsed = parseSubject(textResult.text);
+                entry.pdfParsed = {
+                  origin: pdfParsed.origin,
+                  destination: pdfParsed.destination,
+                  date: pdfParsed.date,
+                  tripKey: buildTripKey(pdfParsed) ?? "NO MATCH",
+                };
+              } catch (err) {
+                entry.pdfParseError = err instanceof Error ? err.message : String(err);
+              }
+            }
+          }
         }
-      } catch {
-        attachmentInfo = ["Failed to fetch attachments"];
       }
     }
 
-    // Strip HTML for preview
-    const bodyPreview = e.body.contentType === "html"
-      ? e.body.content.replace(/<[^>]+>/g, "").slice(0, 200)
-      : e.body.content.slice(0, 200);
-
-    const rawEmail: RawEmail = {
-      id: e.id,
-      subject: e.subject ?? "",
-      from: e.from?.emailAddress?.address ?? "",
-      fromName: e.from?.emailAddress?.name ?? "",
-      receivedAt: e.receivedDateTime,
-      bodyType: e.body.contentType === "html" ? "html" : "text",
-      body: e.body.content ?? "",
-      attachments: [],
-    };
-
-    const quote = parseQuoteFromText(rawEmail);
-
-    parsed.push({
-      subject: e.subject,
-      from: e.from?.emailAddress?.address,
-      received: e.receivedDateTime,
-      hasAttachments: e.hasAttachments,
-      attachments: attachmentInfo,
-      bodyPreview,
-      parsedRoute: subjectParsed.origin && subjectParsed.destination
-        ? `${subjectParsed.origin} → ${subjectParsed.destination}`
-        : "NOT PARSED",
-      parsedDate: subjectParsed.date ?? "NOT PARSED",
-      tripKey: tripKey ?? "NO MATCH — goes to unmatched",
-      extractedPrice: quote.priceFormatted ?? "not found",
-      extractedAircraft: quote.aircraft ?? "not found",
-      extractedTail: quote.tailNumber ?? "not found",
-    });
+    emailResults.push(entry);
   }
 
-  result.step4_emails = parsed;
-  return Response.json(result, { status: 200 });
+  result.emails = emailResults;
+  return Response.json(result);
 }
