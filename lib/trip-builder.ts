@@ -187,24 +187,23 @@ interface CachedResult {
   trips: Trip[];
   unmatched: UnmatchedEmail[];
   timestamp: number;
-  emailIds: string;
 }
 
 let cache: CachedResult | null = null;
-const CACHE_TTL_MS = 45_000; // 45 seconds — shorter than auto-refresh interval
+const CACHE_TTL_MS = 55_000; // 55 seconds — just under the 60s auto-refresh
 
 export async function buildTrips(): Promise<{
   trips: Trip[];
   unmatched: UnmatchedEmail[];
 }> {
-  const emails = await fetchQuoteEmails();
-  const emailIds = emails.map((e) => e.id).sort().join(",");
-
-  // Return cached result if emails haven't changed and cache is fresh
-  if (cache && cache.emailIds === emailIds && (Date.now() - cache.timestamp) < CACHE_TTL_MS) {
-    console.log(`[buildTrips] Cache hit (${emails.length} emails, age ${Math.round((Date.now() - cache.timestamp) / 1000)}s)`);
+  // Return cached result immediately if cache is fresh — skip Outlook fetch entirely
+  if (cache && (Date.now() - cache.timestamp) < CACHE_TTL_MS) {
+    const age = Math.round((Date.now() - cache.timestamp) / 1000);
+    console.log(`[buildTrips] Cache hit (age ${age}s)`);
     return { trips: cache.trips, unmatched: cache.unmatched };
   }
+
+  const emails = await fetchQuoteEmails();
 
   console.log(`[buildTrips] Processing ${emails.length} emails (AI: ${isAiEnabled() ? "ON" : "OFF"})`);
   const startTime = Date.now();
@@ -272,7 +271,7 @@ export async function buildTrips(): Promise<{
   console.log(`[buildTrips] Done in ${elapsed}s: ${trips.length} trips, ${unmatched.length} unmatched`);
 
   // Cache the result
-  cache = { trips, unmatched, timestamp: Date.now(), emailIds };
+  cache = { trips, unmatched, timestamp: Date.now() };
 
   return { trips, unmatched };
 }
