@@ -2,7 +2,7 @@ import "server-only";
 import { fetchQuoteEmails } from "./o365-client";
 import { parseSubject, buildTripKey, type ParsedSubject } from "./subject-parser";
 import { parseQuoteFromText, parseQuoteFromPDF } from "./quote-parser";
-import { aiParseQuote, aiParseTripInfo, isAiEnabled } from "./ai-parser";
+import { aiParseEmail, isAiEnabled, type AiParseResult } from "./ai-parser";
 import { getAirportName, resolveToICAO } from "./airport-lookup";
 import type { Trip, ParsedQuote, RawEmail, UnmatchedEmail } from "./types";
 
@@ -19,11 +19,10 @@ function isSystemEmail(email: RawEmail): boolean {
 }
 
 /**
- * Generate a stable trip ID from the route key (origin|destination|date).
- * This ensures the same trip always gets the same ID across page loads.
+ * Generate a stable trip ID from the route key.
+ * Same trip always gets the same ID across page loads.
  */
 function generateTripId(origin: string, destination: string, date: string): string {
-  // Create a short hash from the route key
   const key = `${origin}|${destination}|${date}`;
   let hash = 0;
   for (let i = 0; i < key.length; i++) {
@@ -62,36 +61,88 @@ function stripHtml(html: string): string {
     .replace(/&#?\w+;/g, "");
 }
 
-// --- Trip info extraction: AI first, regex fallback ---
+// --- Process a single email: AI (single call) → regex fallback ---
 
-async function extractTripInfo(
-  email: RawEmail,
-  pdfText: string | null
-): Promise<ParsedSubject> {
-  // Try AI parser first
+interface ProcessedEmail {
+  quote: ParsedQuote;
+  tripInfo: ParsedSubject;
+}
+
+async function processEmail(email: RawEmail): Promise<ProcessedEmail> {
+  const bodyText = email.bodyType === "html" ? stripHtml(email.body) : email.body;
+  const filenames = email.attachments.map((a) => a.filename);
+
+  // Extract PDF text if present
+  let pdfText: string | null = null;
+  for (const attachment of email.attachments) {
+    const isPdf = attachment.contentType === "application/pdf" ||
+      attachment.filename?.toLowerCase().endsWith(".pdf");
+    if (!isPdf) continue;
+
+    const base64Match = attachment.url.match(/^data:[^;]+;base64,(.+)$/);
+    if (!base64Match) continue;
+
+    pdfText = await extractPdfText(base64Match[1]);
+    if (!pdfText || pdfText.trim().length <= 10) pdfText = null;
+    break;
+  }
+
+  // Try single combined AI call (quote + trip in one request)
   if (isAiEnabled()) {
-    const bodyText = email.bodyType === "html" ? stripHtml(email.body) : email.body;
-    const filenames = email.attachments.map((a) => a.filename);
+    const aiResult = await aiParseEmail(bodyText, email.subject, email.fromName, filenames, pdfText);
 
-    const aiResult = await aiParseTripInfo(email.subject, bodyText, filenames, pdfText);
-    if (aiResult && aiResult.origin && aiResult.destination && aiResult.date) {
-      console.log(`[extractTripInfo] AI parsed: ${aiResult.origin} -> ${aiResult.destination} on ${aiResult.date}`);
-      return { origin: aiResult.origin, destination: aiResult.destination, date: aiResult.date };
-    }
     if (aiResult) {
-      console.log(`[extractTripInfo] AI partial result, supplementing with regex`);
+      console.log(`[processEmail] AI: price=${aiResult.price}, aircraft=${aiResult.aircraft}, route=${aiResult.origin}->${aiResult.destination}, date=${aiResult.date}`);
+
+      const quote: ParsedQuote = {
+        emailId: email.id,
+        price: aiResult.price,
+        priceFormatted: aiResult.price ? `$${aiResult.price.toLocaleString()}` : null,
+        aircraft: aiResult.aircraft,
+        yom: aiResult.yom,
+        maxPax: aiResult.maxPax,
+        tailNumber: aiResult.tailNumber,
+        refurbInterior: aiResult.refurbInterior,
+        refurbExterior: aiResult.refurbExterior,
+        totalHours: aiResult.totalHours,
+        operator: aiResult.operator,
+        quoteSource: pdfText ? "pdf" : aiResult.isExternalLink ? "external" : "inline",
+        externalLink: aiResult.externalLink,
+        status: "Unanswered",
+        receivedAt: email.receivedAt,
+        subject: email.subject,
+        from: email.from,
+        fromName: email.fromName,
+        bodyType: email.bodyType,
+        body: email.body,
+        attachments: email.attachments,
+      };
+
+      // Use AI trip info, supplement with regex if incomplete
+      let origin = aiResult.origin;
+      let destination = aiResult.destination;
+      let date = aiResult.date;
+
+      if (!origin || !destination || !date) {
+        const regexInfo = regexTripFallback(email, pdfText);
+        origin = origin ?? regexInfo.origin;
+        destination = destination ?? regexInfo.destination;
+        date = date ?? regexInfo.date;
+      }
+
+      return { quote, tripInfo: { origin, destination, date } };
     }
   }
 
-  // Regex fallback: subject -> filename -> PDF text -> body
-  const fromSubject = parseSubject(email.subject);
-  if (fromSubject.origin && fromSubject.destination && fromSubject.date) {
-    return fromSubject;
-  }
+  // Full regex fallback (no AI)
+  const quote = pdfText ? parseQuoteFromPDF(email, pdfText) : parseQuoteFromText(email);
+  const tripInfo = regexTripFallback(email, pdfText);
+  return { quote, tripInfo };
+}
 
-  let origin = fromSubject.origin;
-  let destination = fromSubject.destination;
-  let date = fromSubject.date;
+function regexTripFallback(email: RawEmail, pdfText: string | null): ParsedSubject {
+  const fromSubject = parseSubject(email.subject);
+  let { origin, destination, date } = fromSubject;
 
   if (!origin || !destination) {
     for (const att of email.attachments) {
@@ -130,96 +181,46 @@ async function extractTripInfo(
   return { origin, destination, date };
 }
 
-// --- Quote extraction: AI first, regex fallback ---
+// --- In-memory cache to avoid re-parsing on every page load ---
 
-async function processEmail(email: RawEmail): Promise<{ quote: ParsedQuote; pdfText: string | null }> {
-  console.log(`[processEmail] "${email.subject}" from ${email.fromName} — ${email.attachments.length} attachment(s), bodyType=${email.bodyType}, bodyLen=${email.body.length}`);
-  // Log first 200 chars of body for debugging
-  const bodyPreview = (email.bodyType === "html" ? stripHtml(email.body) : email.body).slice(0, 200);
-  console.log(`[processEmail] body preview: ${bodyPreview}`);
-
-  // Extract PDF text if present
-  let pdfText: string | null = null;
-  for (const attachment of email.attachments) {
-    const isPdf = attachment.contentType === "application/pdf" ||
-      attachment.filename?.toLowerCase().endsWith(".pdf");
-    if (!isPdf) continue;
-
-    const base64Match = attachment.url.match(/^data:[^;]+;base64,(.+)$/);
-    if (!base64Match) {
-      console.error(`[processEmail] Could not extract base64 for "${attachment.filename}"`);
-      continue;
-    }
-
-    pdfText = await extractPdfText(base64Match[1]);
-    if (pdfText && pdfText.trim().length > 10) {
-      console.log(`[processEmail] PDF text: ${pdfText.length} chars from "${attachment.filename}"`);
-    } else {
-      console.error(`[processEmail] PDF extraction empty for "${attachment.filename}"`);
-      pdfText = null;
-    }
-    break;
-  }
-
-  // Try AI parsing first
-  if (isAiEnabled()) {
-    const bodyText = email.bodyType === "html" ? stripHtml(email.body) : email.body;
-    const aiResult = await aiParseQuote(bodyText, email.subject, email.fromName, pdfText);
-
-    if (aiResult) {
-      console.log(`[processEmail] AI extracted: price=${aiResult.price}, aircraft=${aiResult.aircraft}, tail=${aiResult.tailNumber}`);
-
-      const quote: ParsedQuote = {
-        emailId: email.id,
-        price: aiResult.price,
-        priceFormatted: aiResult.price ? `$${aiResult.price.toLocaleString()}` : null,
-        aircraft: aiResult.aircraft,
-        yom: aiResult.yom,
-        maxPax: aiResult.maxPax,
-        tailNumber: aiResult.tailNumber,
-        refurbInterior: aiResult.refurbInterior,
-        refurbExterior: aiResult.refurbExterior,
-        totalHours: aiResult.totalHours,
-        operator: aiResult.operator,
-        quoteSource: pdfText ? "pdf" : aiResult.isExternalLink ? "external" : "inline",
-        externalLink: aiResult.externalLink,
-        status: "Unanswered",
-        receivedAt: email.receivedAt,
-        subject: email.subject,
-        from: email.from,
-        fromName: email.fromName,
-        bodyType: email.bodyType,
-        body: email.body,
-        attachments: email.attachments,
-      };
-      return { quote, pdfText };
-    }
-  }
-
-  // Regex fallback
-  if (pdfText) {
-    const quote = parseQuoteFromPDF(email, pdfText);
-    return { quote, pdfText };
-  }
-
-  return { quote: parseQuoteFromText(email), pdfText: null };
+interface CachedResult {
+  trips: Trip[];
+  unmatched: UnmatchedEmail[];
+  timestamp: number;
+  emailIds: string;
 }
+
+let cache: CachedResult | null = null;
+const CACHE_TTL_MS = 45_000; // 45 seconds — shorter than auto-refresh interval
 
 export async function buildTrips(): Promise<{
   trips: Trip[];
   unmatched: UnmatchedEmail[];
 }> {
   const emails = await fetchQuoteEmails();
+  const emailIds = emails.map((e) => e.id).sort().join(",");
+
+  // Return cached result if emails haven't changed and cache is fresh
+  if (cache && cache.emailIds === emailIds && (Date.now() - cache.timestamp) < CACHE_TTL_MS) {
+    console.log(`[buildTrips] Cache hit (${emails.length} emails, age ${Math.round((Date.now() - cache.timestamp) / 1000)}s)`);
+    return { trips: cache.trips, unmatched: cache.unmatched };
+  }
+
   console.log(`[buildTrips] Processing ${emails.length} emails (AI: ${isAiEnabled() ? "ON" : "OFF"})`);
+  const startTime = Date.now();
+
+  // Filter system emails first
+  const validEmails = emails.filter((e) => !isSystemEmail(e));
+
+  // Process ALL emails in parallel
+  const results = await Promise.all(validEmails.map((email) => processEmail(email)));
 
   const tripMap = new Map<string, { origin: string; destination: string; date: string; quotes: ParsedQuote[] }>();
   const unmatched: UnmatchedEmail[] = [];
 
-  for (const email of emails) {
-    if (isSystemEmail(email)) continue;
-
-    const { quote, pdfText } = await processEmail(email);
-    const tripInfo = await extractTripInfo(email, pdfText);
+  for (let i = 0; i < validEmails.length; i++) {
+    const email = validEmails[i];
+    const { quote, tripInfo } = results[i];
     const key = buildTripKey(tripInfo);
 
     if (!key || !tripInfo.origin || !tripInfo.destination || !tripInfo.date) {
@@ -267,6 +268,11 @@ export async function buildTrips(): Promise<{
 
   trips.sort((a, b) => a.date.localeCompare(b.date));
 
-  console.log(`[buildTrips] Result: ${trips.length} trips, ${unmatched.length} unmatched`);
+  const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+  console.log(`[buildTrips] Done in ${elapsed}s: ${trips.length} trips, ${unmatched.length} unmatched`);
+
+  // Cache the result
+  cache = { trips, unmatched, timestamp: Date.now(), emailIds };
+
   return { trips, unmatched };
 }
