@@ -1,9 +1,23 @@
 import "server-only";
 import { fetchQuoteEmails } from "./o365-client";
-import { parseSubject, buildTripKey } from "./subject-parser";
+import { parseSubject, buildTripKey, type ParsedSubject } from "./subject-parser";
 import { parseQuoteFromText, parseQuoteFromPDF } from "./quote-parser";
 import { getAirportName } from "./airport-lookup";
+import { resolveToICAO } from "./airport-lookup";
 import type { Trip, ParsedQuote, RawEmail, UnmatchedEmail } from "./types";
+
+// System/notification senders to ignore
+const IGNORED_SENDERS = [
+  "microsoft.com",
+  "microsoftonline.com",
+  "accountprotection.microsoft.com",
+  "notificationemails.microsoft.com",
+];
+
+function isSystemEmail(email: RawEmail): boolean {
+  const from = email.from.toLowerCase();
+  return IGNORED_SENDERS.some((domain) => from.endsWith(domain));
+}
 
 let tripCounter = 0;
 
@@ -26,28 +40,99 @@ async function extractPdfText(base64Data: string): Promise<string | null> {
   }
 }
 
-async function processEmail(email: RawEmail): Promise<ParsedQuote> {
+// Try to extract route from attachment filenames like "Charter_Quote_KHPN-KMIA.pdf"
+function parseRouteFromFilename(filename: string): { origin: string | null; destination: string | null } {
+  const upper = filename.toUpperCase();
+  const match = upper.match(/([A-Z]{3,4})\s*[-_>\s]\s*([A-Z]{3,4})/);
+  if (match) {
+    const origin = resolveToICAO(match[1]);
+    const dest = resolveToICAO(match[2]);
+    if (origin && dest) return { origin, destination: dest };
+  }
+  return { origin: null, destination: null };
+}
+
+// Try multiple sources to build a complete ParsedSubject
+function extractTripInfo(
+  email: RawEmail,
+  pdfText: string | null
+): ParsedSubject {
+  // 1. Try subject line first
+  const fromSubject = parseSubject(email.subject);
+  if (fromSubject.origin && fromSubject.destination && fromSubject.date) {
+    return fromSubject;
+  }
+
+  let origin = fromSubject.origin;
+  let destination = fromSubject.destination;
+  let date = fromSubject.date;
+
+  // 2. Try attachment filenames for route
+  if (!origin || !destination) {
+    for (const att of email.attachments) {
+      const fromFile = parseRouteFromFilename(att.filename);
+      if (fromFile.origin && fromFile.destination) {
+        origin = fromFile.origin;
+        destination = fromFile.destination;
+        break;
+      }
+    }
+  }
+
+  // 3. Try PDF text for route and date
+  if (pdfText) {
+    const fromPdf = parseSubject(pdfText);
+    if (!origin || !destination) {
+      if (fromPdf.origin && fromPdf.destination) {
+        origin = fromPdf.origin;
+        destination = fromPdf.destination;
+      }
+    }
+    if (!date && fromPdf.date) {
+      date = fromPdf.date;
+    }
+  }
+
+  // 4. Try email body text for route and date
+  if (!origin || !destination || !date) {
+    const bodyText = email.bodyType === "html"
+      ? email.body.replace(/<[^>]+>/g, " ")
+      : email.body;
+    const fromBody = parseSubject(bodyText);
+    if (!origin || !destination) {
+      if (fromBody.origin && fromBody.destination) {
+        origin = fromBody.origin;
+        destination = fromBody.destination;
+      }
+    }
+    if (!date && fromBody.date) {
+      date = fromBody.date;
+    }
+  }
+
+  return { origin, destination, date };
+}
+
+async function processEmail(email: RawEmail): Promise<{ quote: ParsedQuote; pdfText: string | null }> {
   // Check for PDF attachments and extract text
   for (const attachment of email.attachments) {
     if (
       attachment.contentType === "application/pdf" ||
       attachment.filename?.toLowerCase().endsWith(".pdf")
     ) {
-      // Attachment URL is a data URI with base64 content from Graph API
       const base64Match = attachment.url.match(/^data:[^;]+;base64,(.+)$/);
       if (base64Match) {
         const pdfText = await extractPdfText(base64Match[1]);
         if (pdfText && pdfText.trim().length > 10) {
           console.log(`[processEmail] Extracted ${pdfText.length} chars from PDF: ${attachment.filename}`);
-          // Combine email body text with PDF text for parsing
-          const combined = parseQuoteFromPDF(email, pdfText);
-          return combined;
+          const quote = parseQuoteFromPDF(email, pdfText);
+          return { quote, pdfText };
         }
       }
     }
   }
 
-  return parseQuoteFromText(email);
+  return { quote: parseQuoteFromText(email), pdfText: null };
 }
 
 export async function buildTrips(): Promise<{
@@ -63,21 +148,32 @@ export async function buildTrips(): Promise<{
   tripCounter = 0;
 
   for (const email of emails) {
-    const parsed = parseSubject(email.subject);
-    const key = buildTripKey(parsed);
+    // Skip system/notification emails
+    if (isSystemEmail(email)) continue;
 
-    if (!key || !parsed.origin || !parsed.destination || !parsed.date) {
-      unmatched.push({ email, reason: "Could not parse route or date from subject line" });
+    // Process email (extract PDF text if applicable)
+    const { quote, pdfText } = await processEmail(email);
+
+    // Extract trip info from all available sources
+    const tripInfo = extractTripInfo(email, pdfText);
+    const key = buildTripKey(tripInfo);
+
+    if (!key || !tripInfo.origin || !tripInfo.destination || !tripInfo.date) {
+      const missing: string[] = [];
+      if (!tripInfo.origin || !tripInfo.destination) missing.push("route");
+      if (!tripInfo.date) missing.push("date");
+      unmatched.push({
+        email,
+        reason: `Could not parse ${missing.join(" or ")} from subject, body, or attachments`,
+      });
       continue;
     }
 
-    const quote = await processEmail(email);
-
     if (!tripMap.has(key)) {
       tripMap.set(key, {
-        origin: parsed.origin,
-        destination: parsed.destination,
-        date: parsed.date,
+        origin: tripInfo.origin,
+        destination: tripInfo.destination,
+        date: tripInfo.date,
         quotes: [],
       });
     }
