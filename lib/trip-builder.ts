@@ -125,7 +125,10 @@ async function extractTripInfo(
 // --- Quote extraction: AI first, regex fallback ---
 
 async function processEmail(email: RawEmail): Promise<{ quote: ParsedQuote; pdfText: string | null }> {
-  console.log(`[processEmail] "${email.subject}" — ${email.attachments.length} attachment(s)`);
+  console.log(`[processEmail] "${email.subject}" from ${email.fromName} — ${email.attachments.length} attachment(s), bodyType=${email.bodyType}, bodyLen=${email.body.length}`);
+  // Log first 200 chars of body for debugging
+  const bodyPreview = (email.bodyType === "html" ? stripHtml(email.body) : email.body).slice(0, 200);
+  console.log(`[processEmail] body preview: ${bodyPreview}`);
 
   // Extract PDF text if present
   let pdfText: string | null = null;

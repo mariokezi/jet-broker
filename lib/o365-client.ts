@@ -92,7 +92,8 @@ async function fetchAttachments(
   );
 
   if (!res.ok) {
-    console.error(`[Graph] attachments list failed: ${res.status}`);
+    const errBody = await res.text().catch(() => "");
+    console.error(`[Graph] attachments list failed: ${res.status} — ${errBody.slice(0, 300)}`);
     return [];
   }
   const data = await res.json();
@@ -161,9 +162,8 @@ export async function fetchQuoteEmails(): Promise<RawEmail[]> {
   }
 
   if (!accessToken) {
-    console.log("[fetchQuoteEmails] No access token — using seed data");
-    const { loadSeedEmails } = await import("./seed-data");
-    return loadSeedEmails();
+    console.log("[fetchQuoteEmails] No access token — no emails to process");
+    return [];
   }
 
   try {
