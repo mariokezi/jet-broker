@@ -84,7 +84,7 @@ async function fetchAttachments(
   messageId: string
 ): Promise<GraphAttachment[]> {
   const res = await fetch(
-    `https://graph.microsoft.com/v1.0/me/messages/${messageId}/attachments?$select=id,name,contentType,contentBytes,isInline,size`,
+    `https://graph.microsoft.com/v1.0/me/messages/${messageId}/attachments?$select=id,name,contentType,isInline,size`,
     {
       headers: { Authorization: `Bearer ${accessToken}` },
       cache: "no-store",
