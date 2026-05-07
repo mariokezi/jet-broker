@@ -7,7 +7,6 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { ExternalLink, Paperclip } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import type { ParsedQuote } from "@/lib/types";
 
@@ -15,6 +14,27 @@ interface EmailDrawerProps {
   quote: ParsedQuote | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+}
+
+function openAttachment(url: string, filename: string) {
+  // Handle base64 data URIs by converting to blob
+  const match = url.match(/^data:([^;]+);base64,(.+)$/);
+  if (match) {
+    const mimeType = match[1];
+    const base64 = match[2];
+    const binary = atob(base64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) {
+      bytes[i] = binary.charCodeAt(i);
+    }
+    const blob = new Blob([bytes], { type: mimeType });
+    const blobUrl = URL.createObjectURL(blob);
+    window.open(blobUrl, "_blank");
+    // Clean up after a delay
+    setTimeout(() => URL.revokeObjectURL(blobUrl), 30000);
+  } else {
+    window.open(url, "_blank");
+  }
 }
 
 export function EmailDrawer({ quote, open, onOpenChange }: EmailDrawerProps) {
@@ -51,16 +71,21 @@ export function EmailDrawer({ quote, open, onOpenChange }: EmailDrawerProps) {
               <div className="space-y-2">
                 <p className="text-xs font-medium text-white/30 uppercase tracking-wide">Attachments</p>
                 {quote.attachments.map((att) => (
-                  <a
+                  <button
                     key={att.filename}
-                    href={att.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center gap-2 text-sm text-blue-400 hover:text-blue-300"
+                    onClick={() => openAttachment(att.url, att.filename)}
+                    className="flex items-center gap-2 text-sm text-blue-400 hover:text-blue-300 transition-colors"
                   >
-                    <Paperclip className="h-3.5 w-3.5" />
+                    <svg className="h-3.5 w-3.5 shrink-0" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M13.5 7.5l-5.3 5.3a3.5 3.5 0 0 1-5-5L9 2a2.33 2.33 0 0 1 3.3 3.3L6.5 11a1.17 1.17 0 0 1-1.6-1.6L10.5 4" />
+                    </svg>
                     {att.filename}
-                  </a>
+                    <svg className="h-3 w-3 opacity-50" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M12 8.5v4a1.5 1.5 0 0 1-1.5 1.5h-7A1.5 1.5 0 0 1 2 12.5v-7A1.5 1.5 0 0 1 3.5 4H8" />
+                      <path d="M10 2h4v4" />
+                      <path d="M7 9L14 2" />
+                    </svg>
+                  </button>
                 ))}
               </div>
               <div className="border-t border-white/5" />
@@ -89,7 +114,11 @@ export function EmailDrawer({ quote, open, onOpenChange }: EmailDrawerProps) {
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm font-medium text-white/70 hover:bg-white/10 hover:text-white transition-colors w-fit"
               >
-                <ExternalLink className="h-3.5 w-3.5" />
+                <svg className="h-3.5 w-3.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 8.5v4a1.5 1.5 0 0 1-1.5 1.5h-7A1.5 1.5 0 0 1 2 12.5v-7A1.5 1.5 0 0 1 3.5 4H8" />
+                  <path d="M10 2h4v4" />
+                  <path d="M7 9L14 2" />
+                </svg>
                 View on FAA Registry ({quote.tailNumber})
               </a>
             </>
