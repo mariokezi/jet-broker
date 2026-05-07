@@ -18,11 +18,19 @@ function isSystemEmail(email: RawEmail): boolean {
   return IGNORED_SENDERS.some((domain) => from.endsWith(domain));
 }
 
-let tripCounter = 0;
-
-function generateTripId(): string {
-  tripCounter++;
-  return `BCF${String(tripCounter).padStart(3, "0")}`;
+/**
+ * Generate a stable trip ID from the route key (origin|destination|date).
+ * This ensures the same trip always gets the same ID across page loads.
+ */
+function generateTripId(origin: string, destination: string, date: string): string {
+  // Create a short hash from the route key
+  const key = `${origin}|${destination}|${date}`;
+  let hash = 0;
+  for (let i = 0; i < key.length; i++) {
+    hash = ((hash << 5) - hash + key.charCodeAt(i)) | 0;
+  }
+  const code = Math.abs(hash).toString(36).toUpperCase().slice(0, 4).padStart(4, "0");
+  return `BCF-${code}`;
 }
 
 async function extractPdfText(base64Data: string): Promise<string | null> {
@@ -207,8 +215,6 @@ export async function buildTrips(): Promise<{
   const tripMap = new Map<string, { origin: string; destination: string; date: string; quotes: ParsedQuote[] }>();
   const unmatched: UnmatchedEmail[] = [];
 
-  tripCounter = 0;
-
   for (const email of emails) {
     if (isSystemEmail(email)) continue;
 
@@ -247,7 +253,7 @@ export async function buildTrips(): Promise<{
     );
 
     trips.push({
-      tripId: generateTripId(),
+      tripId: generateTripId(data.origin, data.destination, data.date),
       origin: data.origin,
       originName: getAirportName(data.origin),
       destination: data.destination,
