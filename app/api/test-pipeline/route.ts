@@ -104,22 +104,22 @@ export async function GET() {
 
             if (base64) {
               try {
-                const { PDFParse } = await import("pdf-parse");
-                const data = new Uint8Array(Buffer.from(base64, "base64"));
-                const parser = new PDFParse({ data });
-                const textResult = await parser.getText();
-                await parser.destroy();
-                entry.pdfText = textResult.text.slice(0, 500);
-                entry.pdfTextLength = textResult.text.length;
+                const { extractTextFromPdf } = await import("@/lib/pdf-extract");
+                const pdfText = await extractTextFromPdf(base64);
+                if (pdfText) {
+                  entry.pdfText = pdfText.slice(0, 500);
+                  entry.pdfTextLength = pdfText.length;
 
-                // Try parsing route+date from PDF text
-                const pdfParsed = parseSubject(textResult.text);
-                entry.pdfParsed = {
-                  origin: pdfParsed.origin,
-                  destination: pdfParsed.destination,
-                  date: pdfParsed.date,
-                  tripKey: buildTripKey(pdfParsed) ?? "NO MATCH",
-                };
+                  const pdfParsed = parseSubject(pdfText);
+                  entry.pdfParsed = {
+                    origin: pdfParsed.origin,
+                    destination: pdfParsed.destination,
+                    date: pdfParsed.date,
+                    tripKey: buildTripKey(pdfParsed) ?? "NO MATCH",
+                  };
+                } else {
+                  entry.pdfText = "EXTRACTION RETURNED NULL";
+                }
               } catch (err) {
                 entry.pdfParseError = err instanceof Error ? err.message : String(err);
               }

@@ -27,17 +27,8 @@ function generateTripId(): string {
 }
 
 async function extractPdfText(base64Data: string): Promise<string | null> {
-  try {
-    const { PDFParse } = await import("pdf-parse");
-    const data = new Uint8Array(Buffer.from(base64Data, "base64"));
-    const parser = new PDFParse({ data });
-    const result = await parser.getText();
-    await parser.destroy();
-    return result.text;
-  } catch (err) {
-    console.error("[extractPdfText] Failed to parse PDF:", err);
-    return null;
-  }
+  const { extractTextFromPdf } = await import("./pdf-extract");
+  return extractTextFromPdf(base64Data);
 }
 
 // Try to extract route from attachment filenames like "Charter_Quote_KHPN-KMIA.pdf"
