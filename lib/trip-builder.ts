@@ -2,11 +2,10 @@ import "server-only";
 import { fetchQuoteEmails } from "./o365-client";
 import { parseSubject, buildTripKey, type ParsedSubject } from "./subject-parser";
 import { parseQuoteFromText, parseQuoteFromPDF } from "./quote-parser";
-import { getAirportName } from "./airport-lookup";
-import { resolveToICAO } from "./airport-lookup";
+import { aiParseQuote, aiParseTripInfo, isAiEnabled } from "./ai-parser";
+import { getAirportName, resolveToICAO } from "./airport-lookup";
 import type { Trip, ParsedQuote, RawEmail, UnmatchedEmail } from "./types";
 
-// System/notification senders to ignore
 const IGNORED_SENDERS = [
   "microsoft.com",
   "microsoftonline.com",
@@ -31,7 +30,6 @@ async function extractPdfText(base64Data: string): Promise<string | null> {
   return extractTextFromPdf(base64Data);
 }
 
-// Try to extract route from attachment filenames like "Charter_Quote_KHPN-KMIA.pdf"
 function parseRouteFromFilename(filename: string): { origin: string | null; destination: string | null } {
   const upper = filename.toUpperCase();
   const match = upper.match(/([A-Z]{3,4})\s*[-_>\s]\s*([A-Z]{3,4})/);
@@ -43,12 +41,41 @@ function parseRouteFromFilename(filename: string): { origin: string | null; dest
   return { origin: null, destination: null };
 }
 
-// Try multiple sources to build a complete ParsedSubject
-function extractTripInfo(
+function stripHtml(html: string): string {
+  return html
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/p>/gi, "\n")
+    .replace(/<\/tr>/gi, "\n")
+    .replace(/<\/td>/gi, " ")
+    .replace(/<\/li>/gi, "\n")
+    .replace(/<[^>]+>/g, "")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&#?\w+;/g, "");
+}
+
+// --- Trip info extraction: AI first, regex fallback ---
+
+async function extractTripInfo(
   email: RawEmail,
   pdfText: string | null
-): ParsedSubject {
-  // 1. Try subject line first
+): Promise<ParsedSubject> {
+  // Try AI parser first
+  if (isAiEnabled()) {
+    const bodyText = email.bodyType === "html" ? stripHtml(email.body) : email.body;
+    const filenames = email.attachments.map((a) => a.filename);
+
+    const aiResult = await aiParseTripInfo(email.subject, bodyText, filenames, pdfText);
+    if (aiResult && aiResult.origin && aiResult.destination && aiResult.date) {
+      console.log(`[extractTripInfo] AI parsed: ${aiResult.origin} -> ${aiResult.destination} on ${aiResult.date}`);
+      return { origin: aiResult.origin, destination: aiResult.destination, date: aiResult.date };
+    }
+    if (aiResult) {
+      console.log(`[extractTripInfo] AI partial result, supplementing with regex`);
+    }
+  }
+
+  // Regex fallback: subject -> filename -> PDF text -> body
   const fromSubject = parseSubject(email.subject);
   if (fromSubject.origin && fromSubject.destination && fromSubject.date) {
     return fromSubject;
@@ -58,7 +85,6 @@ function extractTripInfo(
   let destination = fromSubject.destination;
   let date = fromSubject.date;
 
-  // 2. Try attachment filenames for route
   if (!origin || !destination) {
     for (const att of email.attachments) {
       const fromFile = parseRouteFromFilename(att.filename);
@@ -70,7 +96,6 @@ function extractTripInfo(
     }
   }
 
-  // 3. Try PDF text for route and date
   if (pdfText) {
     const fromPdf = parseSubject(pdfText);
     if (!origin || !destination) {
@@ -79,16 +104,11 @@ function extractTripInfo(
         destination = fromPdf.destination;
       }
     }
-    if (!date && fromPdf.date) {
-      date = fromPdf.date;
-    }
+    if (!date && fromPdf.date) date = fromPdf.date;
   }
 
-  // 4. Try email body text for route and date
   if (!origin || !destination || !date) {
-    const bodyText = email.bodyType === "html"
-      ? email.body.replace(/<[^>]+>/g, " ")
-      : email.body;
+    const bodyText = email.bodyType === "html" ? email.body.replace(/<[^>]+>/g, " ") : email.body;
     const fromBody = parseSubject(bodyText);
     if (!origin || !destination) {
       if (fromBody.origin && fromBody.destination) {
@@ -96,38 +116,77 @@ function extractTripInfo(
         destination = fromBody.destination;
       }
     }
-    if (!date && fromBody.date) {
-      date = fromBody.date;
-    }
+    if (!date && fromBody.date) date = fromBody.date;
   }
 
   return { origin, destination, date };
 }
 
+// --- Quote extraction: AI first, regex fallback ---
+
 async function processEmail(email: RawEmail): Promise<{ quote: ParsedQuote; pdfText: string | null }> {
   console.log(`[processEmail] "${email.subject}" — ${email.attachments.length} attachment(s)`);
 
+  // Extract PDF text if present
+  let pdfText: string | null = null;
   for (const attachment of email.attachments) {
     const isPdf = attachment.contentType === "application/pdf" ||
       attachment.filename?.toLowerCase().endsWith(".pdf");
-
     if (!isPdf) continue;
-
-    console.log(`[processEmail] Found PDF: "${attachment.filename}" (${attachment.url.length} chars in data URI)`);
 
     const base64Match = attachment.url.match(/^data:[^;]+;base64,(.+)$/);
     if (!base64Match) {
-      console.error(`[processEmail] Could not extract base64 from data URI for "${attachment.filename}"`);
+      console.error(`[processEmail] Could not extract base64 for "${attachment.filename}"`);
       continue;
     }
 
-    const pdfText = await extractPdfText(base64Match[1]);
-    if (!pdfText || pdfText.trim().length <= 10) {
-      console.error(`[processEmail] PDF text extraction returned empty for "${attachment.filename}"`);
-      continue;
+    pdfText = await extractPdfText(base64Match[1]);
+    if (pdfText && pdfText.trim().length > 10) {
+      console.log(`[processEmail] PDF text: ${pdfText.length} chars from "${attachment.filename}"`);
+    } else {
+      console.error(`[processEmail] PDF extraction empty for "${attachment.filename}"`);
+      pdfText = null;
     }
+    break;
+  }
 
-    console.log(`[processEmail] Extracted ${pdfText.length} chars from PDF "${attachment.filename}": ${pdfText.slice(0, 150)}...`);
+  // Try AI parsing first
+  if (isAiEnabled()) {
+    const bodyText = email.bodyType === "html" ? stripHtml(email.body) : email.body;
+    const aiResult = await aiParseQuote(bodyText, email.subject, email.fromName, pdfText);
+
+    if (aiResult) {
+      console.log(`[processEmail] AI extracted: price=${aiResult.price}, aircraft=${aiResult.aircraft}, tail=${aiResult.tailNumber}`);
+
+      const quote: ParsedQuote = {
+        emailId: email.id,
+        price: aiResult.price,
+        priceFormatted: aiResult.price ? `$${aiResult.price.toLocaleString()}` : null,
+        aircraft: aiResult.aircraft,
+        yom: aiResult.yom,
+        maxPax: aiResult.maxPax,
+        tailNumber: aiResult.tailNumber,
+        refurbInterior: aiResult.refurbInterior,
+        refurbExterior: aiResult.refurbExterior,
+        totalHours: aiResult.totalHours,
+        operator: aiResult.operator,
+        quoteSource: pdfText ? "pdf" : aiResult.isExternalLink ? "external" : "inline",
+        externalLink: aiResult.externalLink,
+        status: "Unanswered",
+        receivedAt: email.receivedAt,
+        subject: email.subject,
+        from: email.from,
+        fromName: email.fromName,
+        bodyType: email.bodyType,
+        body: email.body,
+        attachments: email.attachments,
+      };
+      return { quote, pdfText };
+    }
+  }
+
+  // Regex fallback
+  if (pdfText) {
     const quote = parseQuoteFromPDF(email, pdfText);
     return { quote, pdfText };
   }
@@ -140,7 +199,7 @@ export async function buildTrips(): Promise<{
   unmatched: UnmatchedEmail[];
 }> {
   const emails = await fetchQuoteEmails();
-  console.log(`[buildTrips] Processing ${emails.length} emails`);
+  console.log(`[buildTrips] Processing ${emails.length} emails (AI: ${isAiEnabled() ? "ON" : "OFF"})`);
 
   const tripMap = new Map<string, { origin: string; destination: string; date: string; quotes: ParsedQuote[] }>();
   const unmatched: UnmatchedEmail[] = [];
@@ -148,14 +207,10 @@ export async function buildTrips(): Promise<{
   tripCounter = 0;
 
   for (const email of emails) {
-    // Skip system/notification emails
     if (isSystemEmail(email)) continue;
 
-    // Process email (extract PDF text if applicable)
     const { quote, pdfText } = await processEmail(email);
-
-    // Extract trip info from all available sources
-    const tripInfo = extractTripInfo(email, pdfText);
+    const tripInfo = await extractTripInfo(email, pdfText);
     const key = buildTripKey(tripInfo);
 
     if (!key || !tripInfo.origin || !tripInfo.destination || !tripInfo.date) {
