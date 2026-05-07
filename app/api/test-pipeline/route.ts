@@ -90,11 +90,14 @@ export async function GET() {
             if (ctype === "application/pdf" || name.toLowerCase().endsWith(".pdf")) {
               entry.pdfFound = name;
 
-              // Check if contentBytes exists
+              // Get base64 content
+              let pdfBase64: string | null = null;
               if (a.contentBytes) {
                 entry.pdfSource = "contentBytes inline";
-                entry.pdfBase64Length = String(a.contentBytes).length;
-              } else {
+                pdfBase64 = String(a.contentBytes);
+                entry.pdfBase64Length = pdfBase64.length;
+              }
+              if (!pdfBase64) {
                 // Try $value download
                 entry.pdfSource = "downloading via $value";
                 try {
@@ -125,6 +128,25 @@ export async function GET() {
                   }
                 } catch (dlErr) {
                   entry.pdfDownloadError = dlErr instanceof Error ? dlErr.message : String(dlErr);
+                }
+              }
+
+              // Extract text from whichever source provided pdfBase64
+              if (pdfBase64 && !entry.pdfText) {
+                try {
+                  const { extractTextFromPdf } = await import("@/lib/pdf-extract");
+                  const pdfText = await extractTextFromPdf(pdfBase64);
+                  entry.pdfText = pdfText ? pdfText.slice(0, 500) : "EXTRACTION RETURNED NULL";
+                  entry.pdfTextLength = pdfText?.length ?? 0;
+
+                  if (pdfText) {
+                    const pdfParsed = parseSubject(pdfText);
+                    entry.pdfParsedRoute = pdfParsed.origin && pdfParsed.destination
+                      ? `${pdfParsed.origin} -> ${pdfParsed.destination}` : "NOT FOUND";
+                    entry.pdfParsedDate = pdfParsed.date ?? "NOT FOUND";
+                  }
+                } catch (pdfErr) {
+                  entry.pdfExtractError = pdfErr instanceof Error ? pdfErr.message : String(pdfErr);
                 }
               }
 
