@@ -1,71 +1,51 @@
 import "server-only";
+import Anthropic from "@anthropic-ai/sdk";
 
 /**
- * Extract text from a PDF buffer.
- * Uses pdf-parse (PDFParse class) with fallback to raw pdfjs-dist.
+ * Extract text from a PDF using Claude's document reading capability.
+ * Falls back to returning null if API key is missing.
  */
 export async function extractTextFromPdf(base64Data: string): Promise<string | null> {
-  const buffer = Buffer.from(base64Data, "base64");
-
-  // Approach 1: pdf-parse PDFParse class
-  try {
-    const { PDFParse } = await import("pdf-parse");
-    const parser = new PDFParse({ data: new Uint8Array(buffer) });
-    const result = await parser.getText();
-    await parser.destroy();
-    if (result.text && result.text.trim().length > 5) {
-      console.log(`[pdf-extract] pdf-parse succeeded: ${result.text.length} chars`);
-      return result.text;
-    }
-  } catch (err) {
-    console.warn(`[pdf-extract] pdf-parse failed, trying pdfjs-dist fallback:`, err instanceof Error ? err.message : err);
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) {
+    console.error("[pdf-extract] No ANTHROPIC_API_KEY — cannot extract PDF text");
+    return null;
   }
 
-  // Approach 2: pdfjs-dist directly
   try {
-    const pdfjsLib = await import("pdfjs-dist/legacy/build/pdf.mjs");
+    const client = new Anthropic({ apiKey });
+    const response = await client.messages.create({
+      model: "claude-haiku-4-5-20251001",
+      max_tokens: 2048,
+      messages: [
+        {
+          role: "user",
+          content: [
+            {
+              type: "document",
+              source: {
+                type: "base64",
+                media_type: "application/pdf",
+                data: base64Data,
+              },
+            },
+            {
+              type: "text",
+              text: "Extract ALL text from this PDF document. Return the raw text content exactly as it appears, preserving the layout as much as possible. Do not add any commentary or explanation — return ONLY the document text.",
+            },
+          ],
+        },
+      ],
+    });
 
-    // On Vercel serverless, we need to set the worker to the bundled file
-    // or disable it. Try setting to the mjs worker path.
-    if (!pdfjsLib.GlobalWorkerOptions.workerSrc) {
-      try {
-        const path = await import("path");
-        const workerPath = path.join(
-          process.cwd(),
-          "node_modules",
-          "pdfjs-dist",
-          "legacy",
-          "build",
-          "pdf.worker.mjs"
-        );
-        pdfjsLib.GlobalWorkerOptions.workerSrc = workerPath;
-      } catch {
-        // If path resolution fails, pdfjs might still work without it in some environments
-      }
+    const text = response.content[0].type === "text" ? response.content[0].text : "";
+    if (text.trim().length > 5) {
+      console.log(`[pdf-extract] Claude extracted ${text.length} chars from PDF`);
+      return text;
     }
-
-    const doc = await pdfjsLib.getDocument({
-      data: new Uint8Array(buffer),
-    }).promise;
-
-    let fullText = "";
-    for (let i = 1; i <= doc.numPages; i++) {
-      const page = await doc.getPage(i);
-      const content = await page.getTextContent();
-      const items = content.items as Array<{ str: string }>;
-      const pageText = items.map((item) => item.str).join(" ");
-      fullText += pageText + "\n";
-    }
-
-    doc.destroy();
-
-    if (fullText.trim().length > 5) {
-      console.log(`[pdf-extract] pdfjs-dist fallback succeeded: ${fullText.length} chars`);
-      return fullText;
-    }
+    return null;
   } catch (err) {
-    console.error(`[pdf-extract] pdfjs-dist also failed:`, err instanceof Error ? err.message : err);
+    console.error("[pdf-extract] Claude PDF extraction failed:", err instanceof Error ? err.message : err);
+    return null;
   }
-
-  return null;
 }
