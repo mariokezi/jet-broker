@@ -1,6 +1,17 @@
-# Jet Broker — Quote Aggregator
+# JetBroker: Charter Operations
 
-A Next.js dashboard for private jet brokers to aggregate, compare, and manage charter quote emails. The app automatically parses incoming quote emails (plain text, HTML, and PDF), groups them by trip (route + date), and presents an Avinode-style comparison table with sortable columns, FAA registry lookups, and full email previews.
+A Next.js app that runs the private jet brokerage workflow end to end:
+
+1. **Inquiries**: paste any client email, web form, or call notes. Claude (or the built-in rules engine) extracts route, dates, passengers, budget, and contact details, scores the lead Hot/Warm/Cold with transparent reasons, and prices the trip instantly by aircraft category.
+2. **RFQs**: matched operators are picked from the operator network by category and base. In demo mode their responses are simulated and stream in live; in live mode an RFQ email is drafted for you.
+3. **Quotes**: operator quote emails (text, HTML, PDF) are parsed from Outlook, grouped by trip, and ranked with a value score.
+4. **Proposals**: pick options (or auto pick best 3), set markup, draft the cover email with AI, and share a branded client page where the client can reserve an aircraft.
+5. **Schedule**: bookings with margin tracking and an ops checklist (contract, wire, operator confirmation, crew, catering, ground, itinerary).
+6. **Dashboard**: what needs attention, pipeline, upcoming flights, live activity, and hours of manual work replaced.
+
+The header toggle switches between **Demo data** (a built-in inbox dated relative to today) and **Live inbox** (Outlook). Settings has **Reset demo data** to start a walkthrough fresh. See `DEMO.md` for a demo run sheet.
+
+Broker workflow state (inquiries, proposals, bookings) is stored in the browser for now; quotes come from the server.
 
 ## Quickstart
 
@@ -9,7 +20,7 @@ npm install
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000). No environment variables are required for the demo.
+Open [http://localhost:3000](http://localhost:3000). No environment variables are required for the demo. Set `ANTHROPIC_API_KEY` to turn on Claude for quote parsing, inquiry extraction, and email drafting; without it, rules and templates run instead. `SITE_PASSWORD` sets the login password.
 
 ## Deploy to Vercel
 

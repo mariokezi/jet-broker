@@ -1,48 +1,74 @@
+import "server-only";
 import type { RawEmail } from "./types";
-import { readFileSync } from "fs";
-import { join } from "path";
+import { createTextPdfBase64 } from "./pdf-writer";
+import { demoTripDates } from "./demo-clock";
 
 /**
- * Load seed emails with PDF attachments converted to base64 data URIs
- * so the parsing pipeline can process them the same as live Outlook emails.
+ * Demo inbox: realistic operator quote emails for three upcoming trips.
+ * Dates are generated relative to the demo anchor so the data never goes
+ * stale. PDF attachments are rendered at runtime and flow through the same
+ * extraction pipeline as live Outlook attachments.
  */
-export function loadSeedEmails(): RawEmail[] {
-  return seedEmails.map((email) => ({
-    ...email,
-    attachments: email.attachments.map((att) => {
-      // Convert public file paths to base64 data URIs
-      if (att.url.startsWith("/") && !att.url.startsWith("data:")) {
-        try {
-          const filePath = join(process.cwd(), "public", att.url);
-          const buffer = readFileSync(filePath);
-          const base64 = buffer.toString("base64");
-          return {
-            ...att,
-            url: `data:${att.contentType};base64,${base64}`,
-          };
-        } catch (err) {
-          console.error(`[seed-data] Could not read ${att.url}:`, err);
-        }
-      }
-      return att;
-    }),
-  }));
-}
+export function loadSeedEmails(anchorMs: number = Date.now()): RawEmail[] {
+  const { A, B, C } = demoTripDates(anchorMs);
+  // The newest email lands ~25 minutes before the anchor; others keep their original spacing
+  const LATEST = Date.parse("2026-05-06T12:30:00Z");
+  const recv = (iso: string) =>
+    new Date(anchorMs - (LATEST - Date.parse(iso)) - 25 * 60_000).toISOString();
 
-export const seedEmails: RawEmail[] = [
+  // Text rendered into the PDF attachments
+  const pdfQuoteTexts: Record<string, string> = {
+  "AEM_Quote_TEB-PBI.pdf": `AEM AVIATION
+Charter Quote
+
+Route: KTEB to KPBI
+Date: ${A.long}
+
+Aircraft: Citation M2
+Tail: N210AE
+YOM: 2017
+Max passengers: 6
+Total time: 890 hrs
+Interior/Exterior refurb: 2024/2023
+
+Price: $21,750
+
+All prices include fuel, crew, and FET.
+Contact: info@aemaviation.example`,
+
+  "AEM_Quote_VNY-ASE.pdf": `AEM AVIATION
+Charter Quote
+
+Route: KVNY to KASE
+Date: ${B.long}
+
+Aircraft: Hawker 800XP
+Tail: N808AE
+YOM: 2003
+Max passengers: 8
+Total time: 3,450 hrs
+Interior/Exterior refurb: 2021/2020
+
+Price: $31,600
+
+All prices include fuel, crew, and FET.
+Contact: info@aemaviation.example`,
+};
+
+  const seedEmails: RawEmail[] = [
   // ============================================================
-  // TRIP 1: KTEB → KPBI, 2026-05-15 (~9 quotes)
+  // TRIP 1: KTEB → KPBI, ${A.iso} (~9 quotes)
   // ============================================================
   {
     id: "email-001",
-    subject: "Quote: KTEB-KPBI 5/15/26",
+    subject: `Quote: KTEB-KPBI ${A.mdyy}`,
     from: "mike@jetexcellence.example",
     fromName: "Mike Rodriguez",
-    receivedAt: "2026-05-04T10:23:00Z",
+    receivedAt: recv("2026-05-04T10:23:00Z"),
     bodyType: "text",
     body: `Hi,
 
-Thanks for the inquiry. We can offer the following for your KTEB-KPBI trip on 5/15/26:
+Thanks for the inquiry. We can offer the following for your KTEB-KPBI trip on ${A.mdyy}:
 
 Aircraft: Citation X
 Tail: N445AC
@@ -63,14 +89,14 @@ mike@jetexcellence.example`,
   },
   {
     id: "email-002",
-    subject: "RE: Teterboro to Palm Beach trip 05/15/2026",
+    subject: `RE: Teterboro to Palm Beach trip ${A.mmddyyyy}`,
     from: "ops@flightlevelservices.example",
     fromName: "Sarah Chen",
-    receivedAt: "2026-05-04T11:05:00Z",
+    receivedAt: recv("2026-05-04T11:05:00Z"),
     bodyType: "html",
     body: `<div style="font-family: Arial, sans-serif;">
 <p>Good morning,</p>
-<p>We have availability for your <strong>Teterboro to Palm Beach</strong> charter on May 15, 2026.</p>
+<p>We have availability for your <strong>Teterboro to Palm Beach</strong> charter on ${A.long}.</p>
 <table style="border-collapse: collapse; margin: 16px 0;">
 <tr><td style="padding: 4px 12px; border: 1px solid #ddd;"><strong>Aircraft</strong></td><td style="padding: 4px 12px; border: 1px solid #ddd;">Hawker 800XP</td></tr>
 <tr><td style="padding: 4px 12px; border: 1px solid #ddd;"><strong>Registration</strong></td><td style="padding: 4px 12px; border: 1px solid #ddd;">N882JE</td></tr>
@@ -86,17 +112,17 @@ mike@jetexcellence.example`,
   },
   {
     id: "email-003",
-    subject: "Charter quote for TEB > PBI on May 15",
+    subject: `Charter quote for TEB > PBI on ${A.monthDay}`,
     from: "dispatch@trinitypj.example",
     fromName: "James Webb",
-    receivedAt: "2026-05-04T12:30:00Z",
+    receivedAt: recv("2026-05-04T12:30:00Z"),
     bodyType: "text",
     body: `Hello,
 
 Please see our quote for your upcoming charter:
 
 Route: TEB > PBI
-Date: May 15, 2026
+Date: ${A.long}
 Aircraft: Learjet 60
 Tail: N17FL
 YOM: 2004
@@ -115,10 +141,10 @@ dispatch@trinitypj.example`,
   },
   {
     id: "email-004",
-    subject: "Quote: KTEB-KPBI 5/15/26",
+    subject: `Quote: KTEB-KPBI ${A.mdyy}`,
     from: "quotes@atijet.example",
     fromName: "ATI Jet Operations",
-    receivedAt: "2026-05-04T13:15:00Z",
+    receivedAt: recv("2026-05-04T13:15:00Z"),
     bodyType: "text",
     body: `Good afternoon,
 
@@ -142,10 +168,10 @@ quotes@atijet.example`,
   },
   {
     id: "email-005",
-    subject: "RE: Teterboro to Palm Beach 05/15/2026",
+    subject: `RE: Teterboro to Palm Beach ${A.mmddyyyy}`,
     from: "charter@premierPrivateJets.example",
     fromName: "David Kim",
-    receivedAt: "2026-05-04T14:00:00Z",
+    receivedAt: recv("2026-05-04T14:00:00Z"),
     bodyType: "text",
     body: `Hi there,
 
@@ -169,10 +195,10 @@ Premier Private Jets`,
   },
   {
     id: "email-006",
-    subject: "Quote: KTEB-KPBI 5/15/26",
+    subject: `Quote: KTEB-KPBI ${A.mdyy}`,
     from: "ops@merlin1.example",
     fromName: "MERLIN1 Ops",
-    receivedAt: "2026-05-04T15:20:00Z",
+    receivedAt: recv("2026-05-04T15:20:00Z"),
     bodyType: "text",
     body: `Thank you for your request.
 
@@ -193,10 +219,10 @@ ops@merlin1.example`,
   },
   {
     id: "email-007",
-    subject: "Quote for TEB > PBI May 15, 2026",
+    subject: `Quote for TEB > PBI ${A.long}`,
     from: "alex@centuryaviation.example",
     fromName: "Alex Tran",
-    receivedAt: "2026-05-04T16:10:00Z",
+    receivedAt: recv("2026-05-04T16:10:00Z"),
     bodyType: "text",
     body: `Hi,
 
@@ -219,12 +245,12 @@ Century Aviation`,
   },
   {
     id: "email-008",
-    subject: "RE: KTEB-KPBI 5/15/26",
+    subject: `RE: KTEB-KPBI ${A.mdyy}`,
     from: "info@aemaviation.example",
     fromName: "AEM Aviation",
-    receivedAt: "2026-05-04T17:45:00Z",
+    receivedAt: recv("2026-05-04T17:45:00Z"),
     bodyType: "text",
-    body: `We have a PDF quote attached for your Teterboro to Palm Beach trip on May 15.
+    body: `We have a PDF quote attached for your Teterboro to Palm Beach trip on ${A.monthDay}.
 
 Please review the attached document for full details.
 
@@ -232,18 +258,18 @@ AEM Aviation
 info@aemaviation.example`,
     attachments: [
       {
-        filename: "quote-a.pdf",
+        filename: "AEM_Quote_TEB-PBI.pdf",
         contentType: "application/pdf",
-        url: "/sample-quotes/quote-a.pdf",
+        url: "",
       },
     ],
   },
   {
     id: "email-009",
-    subject: "Quote: KTEB-KPBI 5/15/26",
+    subject: `Quote: KTEB-KPBI ${A.mdyy}`,
     from: "bookings@royalflightclub.example",
     fromName: "Royal Flight Club",
-    receivedAt: "2026-05-04T18:30:00Z",
+    receivedAt: recv("2026-05-04T18:30:00Z"),
     bodyType: "text",
     body: `Hello,
 
@@ -259,18 +285,18 @@ bookings@royalflightclub.example`,
   },
 
   // ============================================================
-  // TRIP 2: KVNY → KASE, 2026-05-18 (~6 quotes)
+  // TRIP 2: KVNY → KASE, ${B.iso} (~6 quotes)
   // ============================================================
   {
     id: "email-010",
-    subject: "Aircraft availability — KVNY/KASE 2026-05-18",
+    subject: `Aircraft availability — KVNY/KASE ${B.iso}`,
     from: "ops@flightlevelservices.example",
     fromName: "Sarah Chen",
-    receivedAt: "2026-05-05T09:00:00Z",
+    receivedAt: recv("2026-05-05T09:00:00Z"),
     bodyType: "text",
     body: `Hi,
 
-For your Van Nuys to Aspen charter on May 18:
+For your Van Nuys to Aspen charter on ${B.monthDay}:
 
 Aircraft: Citation M2
 Tail: N202FL
@@ -288,10 +314,10 @@ Flight Level Services`,
   },
   {
     id: "email-011",
-    subject: "RE: Van Nuys to Aspen 05/18/2026",
+    subject: `RE: Van Nuys to Aspen ${B.mmddyyyy}`,
     from: "dispatch@trinitypj.example",
     fromName: "James Webb",
-    receivedAt: "2026-05-05T10:30:00Z",
+    receivedAt: recv("2026-05-05T10:30:00Z"),
     bodyType: "html",
     body: `<div>
 <p>Hello,</p>
@@ -311,14 +337,14 @@ Flight Level Services`,
   },
   {
     id: "email-012",
-    subject: "Quote: KVNY-KASE 5/18/26",
+    subject: `Quote: KVNY-KASE ${B.mdyy}`,
     from: "quotes@atijet.example",
     fromName: "ATI Jet Operations",
-    receivedAt: "2026-05-05T11:45:00Z",
+    receivedAt: recv("2026-05-05T11:45:00Z"),
     bodyType: "text",
     body: `Good morning,
 
-For the VNY-ASE trip on 5/18:
+For the VNY-ASE trip on ${B.md}:
 
 Aircraft: Learjet 60
 Tail: N660AT
@@ -334,10 +360,10 @@ ATI Jet Executive Charter`,
   },
   {
     id: "email-013",
-    subject: "Aircraft availability — KVNY/KASE 2026-05-18",
+    subject: `Aircraft availability — KVNY/KASE ${B.iso}`,
     from: "charter@premierPrivateJets.example",
     fromName: "David Kim",
-    receivedAt: "2026-05-05T13:00:00Z",
+    receivedAt: recv("2026-05-05T13:00:00Z"),
     bodyType: "text",
     body: `Hi,
 
@@ -358,10 +384,10 @@ Premier Private Jets`,
   },
   {
     id: "email-014",
-    subject: "KVNY/KASE 2026-05-18 quote",
+    subject: `KVNY/KASE ${B.iso} quote`,
     from: "alex@centuryaviation.example",
     fromName: "Alex Tran",
-    receivedAt: "2026-05-05T14:30:00Z",
+    receivedAt: recv("2026-05-05T14:30:00Z"),
     bodyType: "text",
     body: `Hello,
 
@@ -383,36 +409,36 @@ Century Aviation`,
   },
   {
     id: "email-015",
-    subject: "Quote: KVNY-KASE 5/18/26",
+    subject: `Quote: KVNY-KASE ${B.mdyy}`,
     from: "info@aemaviation.example",
     fromName: "AEM Aviation",
-    receivedAt: "2026-05-05T16:00:00Z",
+    receivedAt: recv("2026-05-05T16:00:00Z"),
     bodyType: "text",
     body: `Attached is our PDF quote for the Van Nuys to Aspen trip.
 
 AEM Aviation`,
     attachments: [
       {
-        filename: "quote-b.pdf",
+        filename: "AEM_Quote_VNY-ASE.pdf",
         contentType: "application/pdf",
-        url: "/sample-quotes/quote-b.pdf",
+        url: "",
       },
     ],
   },
 
   // ============================================================
-  // TRIP 3: KOPF → KTEB, 2026-05-20 (~5 quotes)
+  // TRIP 3: KOPF → KTEB, ${C.iso} (~5 quotes)
   // ============================================================
   {
     id: "email-016",
-    subject: "Trip request: Opa-Locka to Teterboro 5/20",
+    subject: `Trip request: Opa-Locka to Teterboro ${C.md}`,
     from: "mike@jetexcellence.example",
     fromName: "Mike Rodriguez",
-    receivedAt: "2026-05-06T08:00:00Z",
+    receivedAt: recv("2026-05-06T08:00:00Z"),
     bodyType: "text",
     body: `Hi,
 
-Jet Excellence can offer the following for your OPF-TEB trip on 5/20:
+Jet Excellence can offer the following for your OPF-TEB trip on ${C.md}:
 
 Aircraft: Hawker 800XP
 Tail: N800JE
@@ -430,15 +456,15 @@ Jet Excellence`,
   },
   {
     id: "email-017",
-    subject: "Charter quote — Opa-Locka to Teterboro on 5/20",
+    subject: `Charter quote — Opa-Locka to Teterboro on ${C.md}`,
     from: "ops@flightlevelservices.example",
     fromName: "Sarah Chen",
-    receivedAt: "2026-05-06T09:30:00Z",
+    receivedAt: recv("2026-05-06T09:30:00Z"),
     bodyType: "html",
     body: `<div style="font-family: Helvetica, sans-serif;">
 <h3>Charter Quote</h3>
 <p><strong>Route:</strong> KOPF → KTEB<br>
-<strong>Date:</strong> May 20, 2026</p>
+<strong>Date:</strong> ${C.long}</p>
 <p><strong>Aircraft:</strong> Citation X<br>
 <strong>Tail:</strong> N123XJ<br>
 <strong>YOM:</strong> 2000<br>
@@ -452,14 +478,14 @@ Jet Excellence`,
   },
   {
     id: "email-018",
-    subject: "RE: Opa-Locka to Teterboro 5/20/26",
+    subject: `RE: Opa-Locka to Teterboro ${C.mdyy}`,
     from: "dispatch@trinitypj.example",
     fromName: "James Webb",
-    receivedAt: "2026-05-06T10:15:00Z",
+    receivedAt: recv("2026-05-06T10:15:00Z"),
     bodyType: "text",
     body: `Hello,
 
-Trinity Private Jet Charter — quote for OPF to TEB on 5/20:
+Trinity Private Jet Charter — quote for OPF to TEB on ${C.md}:
 
 Aircraft: Phenom 300
 Tail: N300TJ
@@ -476,12 +502,12 @@ Trinity Private Jet Charter`,
   },
   {
     id: "email-019",
-    subject: "KOPF-KTEB 5/20/26",
+    subject: `KOPF-KTEB ${C.mdyy}`,
     from: "ops@merlin1.example",
     fromName: "MERLIN1 Ops",
-    receivedAt: "2026-05-06T11:00:00Z",
+    receivedAt: recv("2026-05-06T11:00:00Z"),
     bodyType: "text",
-    body: `Quote for OPF-TEB, May 20:
+    body: `Quote for OPF-TEB, ${C.monthDay}:
 
 Aircraft: Citation VII
 Tail: N707ML
@@ -497,10 +523,10 @@ MERLIN1`,
   },
   {
     id: "email-020",
-    subject: "Charter quote — Opa-Locka to Teterboro on 5/20",
+    subject: `Charter quote — Opa-Locka to Teterboro on ${C.md}`,
     from: "bookings@royalflightclub.example",
     fromName: "Royal Flight Club",
-    receivedAt: "2026-05-06T12:30:00Z",
+    receivedAt: recv("2026-05-06T12:30:00Z"),
     bodyType: "text",
     body: `Hi,
 
@@ -520,41 +546,14 @@ Royal Flight Club`,
   },
 ];
 
-// PDF text content (simulating what pdf-parse would extract)
-export const pdfQuoteTexts: Record<string, string> = {
-  "quote-a.pdf": `AEM AVIATION
-Charter Quote
 
-Route: KTEB to KPBI
-Date: May 15, 2026
-
-Aircraft: Citation M2
-Tail: N210AE
-YOM: 2017
-Max passengers: 6
-Total time: 890 hrs
-Interior/Exterior refurb: 2024/2023
-
-Price: $21,750
-
-All prices include fuel, crew, and FET.
-Contact: info@aemaviation.example`,
-
-  "quote-b.pdf": `AEM AVIATION
-Charter Quote
-
-Route: KVNY to KASE
-Date: May 18, 2026
-
-Aircraft: Hawker 800XP
-Tail: N808AE
-YOM: 2003
-Max passengers: 8
-Total time: 3,450 hrs
-Interior/Exterior refurb: 2021/2020
-
-Price: $31,600
-
-All prices include fuel, crew, and FET.
-Contact: info@aemaviation.example`,
-};
+  return seedEmails.map((email) => ({
+    ...email,
+    attachments: email.attachments.map((att) => {
+      const text = pdfQuoteTexts[att.filename];
+      return text
+        ? { ...att, url: `data:application/pdf;base64,${createTextPdfBase64(text)}` }
+        : att;
+    }),
+  }));
+}

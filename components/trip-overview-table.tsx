@@ -231,9 +231,11 @@ export function TripOverviewTable({ trips, unmatched }: TripOverviewTableProps) 
                     <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${
                       hasFlags
                         ? "bg-amber-500/10 border border-amber-500/20 text-amber-400"
-                        : "bg-emerald-500/10 border border-emerald-500/20 text-emerald-400"
+                        : trip.status === "Closed"
+                          ? "bg-blue-500/10 border border-blue-500/20 text-blue-300"
+                          : "bg-emerald-500/10 border border-emerald-500/20 text-emerald-400"
                     }`}>
-                      {hasFlags ? "Review" : trip.status}
+                      {hasFlags ? "Review" : trip.status === "Closed" ? "Booked" : trip.status}
                     </span>
                     <svg className="h-4 w-4 text-white/15 group-hover:text-white/40 transition-colors" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                       <path d="M6 4l4 4-4 4" />

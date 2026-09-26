@@ -2,8 +2,11 @@ import "server-only";
 import { fetchQuoteEmails } from "./o365-client";
 import { parseSubject, buildTripKey, type ParsedSubject } from "./subject-parser";
 import { parseQuoteFromText, parseQuoteFromPDF } from "./quote-parser";
-import { aiParseEmail, isAiEnabled, type AiParseResult } from "./ai-parser";
+import { aiParseEmail, isAiEnabled } from "./ai-parser";
 import { getAirportName, resolveToICAO } from "./airport-lookup";
+import { getDataContext } from "./data-mode";
+import { loadSeedEmails } from "./seed-data";
+import { generateTripId } from "./trip-id";
 import type { Trip, ParsedQuote, RawEmail, UnmatchedEmail } from "./types";
 
 const IGNORED_SENDERS = [
@@ -16,20 +19,6 @@ const IGNORED_SENDERS = [
 function isSystemEmail(email: RawEmail): boolean {
   const from = email.from.toLowerCase();
   return IGNORED_SENDERS.some((domain) => from.endsWith(domain));
-}
-
-/**
- * Generate a stable trip ID from the route key.
- * Same trip always gets the same ID across page loads.
- */
-function generateTripId(origin: string, destination: string, date: string): string {
-  const key = `${origin}|${destination}|${date}`;
-  let hash = 0;
-  for (let i = 0; i < key.length; i++) {
-    hash = ((hash << 5) - hash + key.charCodeAt(i)) | 0;
-  }
-  const code = Math.abs(hash).toString(36).toUpperCase().slice(0, 4).padStart(4, "0");
-  return `BCF-${code}`;
 }
 
 async function extractPdfText(base64Data: string): Promise<string | null> {
@@ -66,6 +55,29 @@ function stripHtml(html: string): string {
 interface ProcessedEmail {
   quote: ParsedQuote;
   tripInfo: ParsedSubject;
+}
+
+// Parsed results are cached per email so each message is only sent to the AI once
+const parseCache = new Map<string, ProcessedEmail>();
+
+function emailFingerprint(email: RawEmail): string {
+  let hash = 0;
+  const text = email.subject + email.body;
+  for (let i = 0; i < text.length; i++) hash = ((hash << 5) - hash + text.charCodeAt(i)) | 0;
+  return `${email.id}|${hash}`;
+}
+
+async function processEmailCached(email: RawEmail): Promise<ProcessedEmail> {
+  const key = emailFingerprint(email);
+  const hit = parseCache.get(key);
+  if (hit) {
+    // Received time may shift (demo anchor); everything else is stable
+    return { ...hit, quote: { ...hit.quote, receivedAt: email.receivedAt, attachments: email.attachments } };
+  }
+  const result = await processEmail(email);
+  if (parseCache.size > 2000) parseCache.clear();
+  parseCache.set(key, result);
+  return result;
 }
 
 async function processEmail(email: RawEmail): Promise<ProcessedEmail> {
@@ -184,6 +196,7 @@ function regexTripFallback(email: RawEmail, pdfText: string | null): ParsedSubje
 // --- In-memory cache to avoid re-parsing on every page load ---
 
 interface CachedResult {
+  key: string;
   trips: Trip[];
   unmatched: UnmatchedEmail[];
   timestamp: number;
@@ -196,14 +209,17 @@ export async function buildTrips(): Promise<{
   trips: Trip[];
   unmatched: UnmatchedEmail[];
 }> {
+  const { mode, anchorMs } = await getDataContext();
+  const cacheKey = mode === "demo" ? `demo:${anchorMs}` : "live";
+
   // Return cached result immediately if cache is fresh — skip Outlook fetch entirely
-  if (cache && (Date.now() - cache.timestamp) < CACHE_TTL_MS) {
+  if (cache && cache.key === cacheKey && (Date.now() - cache.timestamp) < CACHE_TTL_MS) {
     const age = Math.round((Date.now() - cache.timestamp) / 1000);
     console.log(`[buildTrips] Cache hit (age ${age}s)`);
     return { trips: cache.trips, unmatched: cache.unmatched };
   }
 
-  const emails = await fetchQuoteEmails();
+  const emails = mode === "demo" ? loadSeedEmails(anchorMs) : await fetchQuoteEmails();
 
   console.log(`[buildTrips] Processing ${emails.length} emails (AI: ${isAiEnabled() ? "ON" : "OFF"})`);
   const startTime = Date.now();
@@ -212,7 +228,7 @@ export async function buildTrips(): Promise<{
   const validEmails = emails.filter((e) => !isSystemEmail(e));
 
   // Process ALL emails in parallel
-  const results = await Promise.all(validEmails.map((email) => processEmail(email)));
+  const results = await Promise.all(validEmails.map((email) => processEmailCached(email)));
 
   const tripMap = new Map<string, { origin: string; destination: string; date: string; quotes: ParsedQuote[] }>();
   const unmatched: UnmatchedEmail[] = [];
@@ -271,7 +287,7 @@ export async function buildTrips(): Promise<{
   console.log(`[buildTrips] Done in ${elapsed}s: ${trips.length} trips, ${unmatched.length} unmatched`);
 
   // Cache the result
-  cache = { trips, unmatched, timestamp: Date.now() };
+  cache = { key: cacheKey, trips, unmatched, timestamp: Date.now() };
 
   return { trips, unmatched };
 }
