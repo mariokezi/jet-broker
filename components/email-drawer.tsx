@@ -16,7 +16,7 @@ interface EmailDrawerProps {
   onOpenChange: (open: boolean) => void;
 }
 
-function openAttachment(url: string, filename: string) {
+function openAttachment(url: string) {
   // Handle base64 data URIs by converting to blob
   const match = url.match(/^data:([^;]+);base64,(.+)$/);
   if (match) {
@@ -73,7 +73,7 @@ export function EmailDrawer({ quote, open, onOpenChange }: EmailDrawerProps) {
                 {quote.attachments.map((att) => (
                   <button
                     key={att.filename}
-                    onClick={() => openAttachment(att.url, att.filename)}
+                    onClick={() => openAttachment(att.url)}
                     className="flex items-center gap-2 text-sm text-blue-400 hover:text-blue-300 transition-colors"
                   >
                     <svg className="h-3.5 w-3.5 shrink-0" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
