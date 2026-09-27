@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { useMemo } from "react";
 import { format, formatDistanceToNow, parseISO } from "date-fns";
-import { AlertTriangle, ArrowRight, Clock, Flame, Mail, PlaneTakeoff, Sparkles, Zap } from "lucide-react";
+import { AlertTriangle, ArrowRight, Clock, Flame, Mail, PlaneTakeoff, Repeat, Sparkles, Zap } from "lucide-react";
+import { findMatches } from "@/lib/empty-legs";
 import { useStore } from "./store-provider";
 import { useMergedTrips } from "./use-trips";
 import { LoadingBlock, Panel, TierBadge } from "./ui-bits";
@@ -57,7 +58,16 @@ export function Dashboard({ trips, mode }: { trips: Trip[]; mode: "demo" | "live
     const funnel = FUNNEL.map((status) => ({ status, count: inquiries.filter((i) => i.status === status).length }));
 
     // Things a broker should do next
-    const attention: { key: string; icon: "hot" | "rfq" | "proposal" | "ops"; text: string; sub: string; href: string }[] = [];
+    const attention: { key: string; icon: "hot" | "rfq" | "proposal" | "ops" | "leg"; text: string; sub: string; href: string }[] = [];
+    for (const m of findMatches(state.emptyLegs, inquiries)) {
+      attention.push({
+        key: `leg-${m.leg.id}-${m.inquiry.id}`,
+        icon: "leg",
+        text: `Empty leg fits ${m.inquiry.clientName ?? "a client"}`,
+        sub: `${getIATA(m.leg.origin)} to ${getIATA(m.leg.destination)} \u00b7 ${m.leg.aircraft} \u00b7 ${m.savingsPct !== null ? `~${m.savingsPct}% below charter \u00b7 ` : ""}${m.leg.postedBy.company}`,
+        href: `/empty-legs?leg=${m.leg.id}`,
+      });
+    }
     for (const i of open) {
       const tripId = inquiryTripId(i);
       if ((i.status === "Qualified" || i.status === "New") && i.qualification.tier !== "Cold" && tripId) {
@@ -254,12 +264,13 @@ function AutoRow({ label, count, mins }: { label: string; count: number; mins: n
   );
 }
 
-function AttentionIcon({ kind }: { kind: "hot" | "rfq" | "proposal" | "ops" }) {
+function AttentionIcon({ kind }: { kind: "hot" | "rfq" | "proposal" | "ops" | "leg" }) {
   const map = {
     hot: { Icon: Flame, cls: "bg-rose-500/10 text-rose-300 border-rose-500/20" },
     rfq: { Icon: Mail, cls: "bg-violet-500/10 text-violet-300 border-violet-500/20" },
     proposal: { Icon: Sparkles, cls: "bg-cyan-500/10 text-cyan-300 border-cyan-500/20" },
     ops: { Icon: AlertTriangle, cls: "bg-amber-500/10 text-amber-300 border-amber-500/20" },
+    leg: { Icon: Repeat, cls: "bg-emerald-500/10 text-emerald-300 border-emerald-500/20" },
   }[kind];
   return (
     <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border ${map.cls}`}>

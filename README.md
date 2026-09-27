@@ -7,7 +7,8 @@ A Next.js app that runs the private jet brokerage workflow end to end:
 3. **Quotes**: operator quote emails (text, HTML, PDF) are parsed from Outlook, grouped by trip, and ranked with a value score.
 4. **Proposals**: pick options (or auto pick best 3), set markup, draft the cover email with AI, and share a branded client page where the client can reserve an aircraft.
 5. **Schedule**: bookings with margin tracking and an ops checklist (contract, wire, operator confirmation, crew, catering, ground, itinerary).
-6. **Dashboard**: what needs attention, pipeline, upcoming flights, live activity, and hours of manual work replaced.
+6. **Empty Legs network**: brokers and operators post empty repositioning legs, filter by region (Florida first) and aircraft size, message each other per leg, and claim a leg for a client. Legs that fit open inquiries are flagged automatically with the saving versus a normal charter, and any booking's empty return can be posted in one click.
+7. **Dashboard**: what needs attention, pipeline, upcoming flights, live activity, and hours of manual work replaced.
 
 The header toggle switches between **Demo data** (a built-in inbox dated relative to today) and **Live inbox** (Outlook). Settings has **Reset demo data** to start a walkthrough fresh. See `DEMO.md` for a demo run sheet.
 

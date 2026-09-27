@@ -3,9 +3,11 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { DEMO_ANCHOR_COOKIE } from "@/lib/demo-clock";
-import { createSeedState, inquiryTripId, newId, STATE_VERSION, type AppState } from "@/lib/demo-state";
+import { checklistTemplate, createSeedState, inquiryTripId, newId, STATE_VERSION, type AppState } from "@/lib/demo-state";
 import { matchOperators, simulateOperatorQuotes } from "@/lib/fleet";
 import { getIATA } from "@/lib/airport-lookup";
+import { simulatedInterest, simulatedReply, type EmptyLeg, type LegMessage, type LegStatus } from "@/lib/empty-legs";
+import { normalizeTime } from "@/lib/time";
 import type {
   ActivityItem,
   Booking,
@@ -54,6 +56,10 @@ interface StoreApi {
   updateSettings: (patch: Partial<BrokerSettings>) => void;
   log: (item: Omit<ActivityItem, "id" | "at">) => void;
   resetDemo: () => void;
+  postLeg: (leg: EmptyLeg) => void;
+  sendLegMessage: (legId: string, text: string) => void;
+  claimLeg: (legId: string, claim: { inquiryId: string | null; clientName: string; clientPrice: number }) => void;
+  setLegStatus: (legId: string, status: LegStatus) => void;
 }
 
 const StoreContext = createContext<StoreApi | null>(null);
@@ -123,6 +129,69 @@ export function StoreProvider({ children, mode }: { children: React.ReactNode; m
         ],
       }
     );
+  }, [now, state]);
+
+  // Demo network: the poster accepts a claim a few seconds after it is sent
+  useEffect(() => {
+    if (!state) return;
+    const accepted = state.emptyLegs.filter((l) => l.status === "Pending" && l.claim && Date.parse(l.claim.acceptAt) <= now);
+    if (accepted.length === 0) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- simulated counterparty acceptance on clock tick
+    setState((s) => {
+      if (!s) return s;
+      const at = new Date().toISOString();
+      const bookings: Booking[] = [];
+      const messages: LegMessage[] = [];
+      const activity: ActivityItem[] = [];
+      const bookedInquiries = new Set<string>();
+      for (const leg of accepted) {
+        const claim = leg.claim!;
+        const inq = claim.inquiryId ? s.inquiries.find((i) => i.id === claim.inquiryId) : undefined;
+        if (inq) bookedInquiries.add(inq.id);
+        const date = inq?.date && inq.date >= leg.earliest && inq.date <= leg.latest ? inq.date : leg.earliest;
+        bookings.push({
+          id: newId("BK"),
+          tripId: (inq && inquiryTripId(inq)) || `EL-${leg.id}`,
+          inquiryId: inq?.id ?? null,
+          createdAt: at,
+          clientName: claim.clientName,
+          origin: leg.origin,
+          destination: leg.destination,
+          date,
+          departureTime: normalizeTime(inq?.departureTime ?? null),
+          pax: inq?.pax ?? null,
+          operator: leg.postedBy.company,
+          aircraft: leg.aircraft,
+          tailNumber: leg.tailNumber,
+          operatorPrice: leg.askingPrice,
+          clientPrice: claim.clientPrice,
+          checklist: checklistTemplate(),
+        });
+        messages.push({
+          id: newId("LM"),
+          legId: leg.id,
+          at,
+          fromMe: false,
+          author: `${leg.postedBy.name}, ${leg.postedBy.company}`,
+          text: `Confirmed, the leg is yours for ${claim.clientName}. Sending the trip sheet and agreement now.`,
+        });
+        activity.push({
+          id: newId("act"),
+          at,
+          kind: "booking",
+          text: `Empty leg ${getIATA(leg.origin)} to ${getIATA(leg.destination)} confirmed by ${leg.postedBy.company} for ${claim.clientName}. Margin $${(claim.clientPrice - leg.askingPrice).toLocaleString()}`,
+          href: "/schedule",
+        });
+      }
+      return {
+        ...s,
+        emptyLegs: s.emptyLegs.map((l) => (accepted.some((a) => a.id === l.id) ? { ...l, status: "Claimed" } : l)),
+        legMessages: [...s.legMessages, ...messages],
+        bookings: [...bookings, ...s.bookings],
+        inquiries: s.inquiries.map((i) => (bookedInquiries.has(i.id) ? { ...i, status: "Booked" } : i)),
+        activity: [...activity, ...s.activity],
+      };
+    });
   }, [now, state]);
 
   const mutate = useCallback((fn: (s: AppState) => AppState) => {
@@ -226,6 +295,68 @@ export function StoreProvider({ children, mode }: { children: React.ReactNode; m
           ),
         })),
       updateSettings: (patch) => mutate((s) => ({ ...s, settings: { ...s.settings, ...patch } })),
+      postLeg: (leg) =>
+        mutate((s) => {
+          const interest = simulatedInterest(leg);
+          const incoming: LegMessage[] =
+            mode === "demo"
+              ? [{ id: newId("LM"), legId: leg.id, at: new Date(Date.now() + 9000).toISOString(), fromMe: false, author: interest.author, text: interest.text }]
+              : [];
+          return {
+            ...s,
+            emptyLegs: [leg, ...s.emptyLegs],
+            legMessages: [...s.legMessages, ...incoming],
+            activity: [
+              {
+                id: newId("act"),
+                at: new Date().toISOString(),
+                kind: "ops",
+                text: `Posted empty leg ${getIATA(leg.origin)} to ${getIATA(leg.destination)} (${leg.aircraft}) to the broker network`,
+                href: `/empty-legs?leg=${leg.id}`,
+              },
+              ...s.activity,
+            ],
+          };
+        }),
+      sendLegMessage: (legId, text) =>
+        mutate((s) => {
+          const leg = s.emptyLegs.find((l) => l.id === legId);
+          if (!leg) return s;
+          const nowMs = Date.now();
+          const mine: LegMessage = { id: newId("LM"), legId, at: new Date(nowMs).toISOString(), fromMe: true, author: s.settings.brokerName, text };
+          const replies: LegMessage[] = [];
+          if (mode === "demo") {
+            if (!leg.isMine) {
+              replies.push({ id: newId("LM"), legId, at: new Date(nowMs + 2500).toISOString(), fromMe: false, author: `${leg.postedBy.name}, ${leg.postedBy.company}`, text: simulatedReply(leg, text) });
+            } else {
+              const other = [...s.legMessages].reverse().find((m) => m.legId === legId && !m.fromMe);
+              if (other) replies.push({ id: newId("LM"), legId, at: new Date(nowMs + 3000).toISOString(), fromMe: false, author: other.author, text: "Understood, thanks. I'll confirm with my client and come back to you shortly." });
+            }
+          }
+          return { ...s, legMessages: [...s.legMessages, mine, ...replies] };
+        }),
+      claimLeg: (legId, claim) =>
+        mutate((s) => {
+          const nowMs = Date.now();
+          return {
+            ...s,
+            emptyLegs: s.emptyLegs.map((l) =>
+              l.id === legId
+                ? {
+                    ...l,
+                    status: "Pending",
+                    claim: { ...claim, requestedAt: new Date(nowMs).toISOString(), acceptAt: new Date(nowMs + (mode === "demo" ? 4500 : 365 * 86_400_000)).toISOString() },
+                  }
+                : l
+            ),
+            legMessages: [
+              ...s.legMessages,
+              { id: newId("LM"), legId, at: new Date(nowMs).toISOString(), fromMe: true, author: s.settings.brokerName, text: `Claim request: I'd like to book this leg for ${claim.clientName}.` },
+            ],
+          };
+        }),
+      setLegStatus: (legId, status) =>
+        mutate((s) => ({ ...s, emptyLegs: s.emptyLegs.map((l) => (l.id === legId ? { ...l, status } : l)) })),
       resetDemo: () => {
         const fresh = createSeedState(Date.now());
         setAnchorCookie(fresh.anchorMs);

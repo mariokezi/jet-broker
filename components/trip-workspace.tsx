@@ -13,6 +13,7 @@ import { distanceNm, getAirportCity, getAirportName, getIATA } from "@/lib/airpo
 import { checklistTemplate, inquiryTripId, newId } from "@/lib/demo-state";
 import { proposalTemplate } from "@/lib/drafts";
 import { money } from "@/lib/money";
+import { normalizeTime } from "@/lib/time";
 import type { Booking, ParsedQuote, Proposal, ProposalOption, Trip } from "@/lib/types";
 
 export function TripWorkspace({ tripId, serverTrip, mode }: { tripId: string; serverTrip: Trip | null; mode: "demo" | "live" }) {
@@ -526,14 +527,4 @@ function BookDialog({
       </div>
     </div>
   );
-}
-
-export function normalizeTime(t: string | null): string {
-  if (!t) return "09:00";
-  const m = t.match(/(\d{1,2})(?::(\d{2}))?\s*(am|pm)?/i);
-  if (!m) return /afternoon/i.test(t) ? "14:00" : /evening/i.test(t) ? "18:00" : "09:00";
-  let h = parseInt(m[1]);
-  if (m[3]?.toLowerCase() === "pm" && h < 12) h += 12;
-  if (m[3]?.toLowerCase() === "am" && h === 12) h = 0;
-  return `${String(h).padStart(2, "0")}:${m[2] ?? "00"}`;
 }

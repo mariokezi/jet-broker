@@ -14,6 +14,7 @@ import { followupTemplate, rfqTemplate } from "@/lib/drafts";
 import { matchOperators } from "@/lib/fleet";
 import { money } from "@/lib/money";
 import type { Inquiry } from "@/lib/types";
+import { findMatches } from "@/lib/empty-legs";
 
 export function InquiryDetail({ id, emailQuoteCounts }: { id: string; emailQuoteCounts: Record<string, number> }) {
   const store = useStore();
@@ -69,6 +70,21 @@ function Detail({ inq, emailQuoteCounts }: { inq: Inquiry; emailQuoteCounts: Rec
           </button>
         )}
       </div>
+
+      {findMatches(store.state.emptyLegs, [inq]).map((m) => (
+        <Link
+          key={m.leg.id}
+          href={`/empty-legs?leg=${m.leg.id}`}
+          className="mb-3 flex items-center gap-3 flex-wrap rounded-xl border border-emerald-500/20 bg-emerald-500/[0.06] px-4 py-3 text-sm hover:bg-emerald-500/10"
+        >
+          <span className="text-[10px] uppercase tracking-wider text-emerald-300/80 font-medium">Empty leg match</span>
+          <span className="text-emerald-50/90">
+            {getIATA(m.leg.origin)} to {getIATA(m.leg.destination)}, {m.leg.aircraft}, {money(m.leg.askingPrice)} from {m.leg.postedBy.company}
+            {m.savingsPct !== null && <span className="text-emerald-300"> (about {m.savingsPct}% below charter)</span>}
+          </span>
+          <ArrowRight className="h-4 w-4 text-emerald-300 ml-auto" />
+        </Link>
+      ))}
 
       <NextStep inq={inq} tripId={tripId} received={received} pending={pending} total={rfq?.length ?? 0} proposalStatus={proposal?.status} bookingId={booking?.id} />
 

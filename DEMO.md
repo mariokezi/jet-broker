@@ -18,10 +18,13 @@ Back on the Aspen lead, **Save and send RFQ to operators**. Quotes arrive over ~
 ## 5. Email parsing (1 min)
 **Quotes** > Teterboro to Palm Beach. Nine operator emails, including PDF attachments and a portal link flagged for review, all normalized into one table. Click a row to show the original email.
 
-## 6. Schedule (1 min)
-The booking you just made appears with margin and the ops checklist.
+## 6. Empty Legs network (2 min)
+**Empty Legs** in the nav. Brokers and operators post repositioning flights that would otherwise fly back empty. Show the Florida filter, then the green **Matches for your clients** box: the app spotted that a Fort Lauderdale to Teterboro leg fits Marcus Delgado's trip at about half the charter price. Open it, message the operator ("what's your best price?"), then **Claim this leg for a client**. The operator confirms and it lands in the schedule.
 
-## 7. Live inbox (optional)
+## 7. Schedule (1 min)
+The bookings you just made appear with margin and the ops checklist. On any upcoming booking, click **Post empty return** to list the flight home on the network; another broker replies within seconds.
+
+## 8. Live inbox (optional)
 Toggle **Live inbox** only if Outlook is connected to an inbox you're comfortable showing.
 
-Note: in demo mode, operator RFQ responses are simulated (the page says so). Everything else, parsing, scoring, estimates, drafting, is the real pipeline.
+Note: in demo mode, operator RFQ responses and the other brokers on the Empty Legs network are simulated (the pages say so). Everything else, parsing, scoring, estimates, drafting, is the real pipeline.

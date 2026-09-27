@@ -1,6 +1,7 @@
 import { heuristicExtract, qualify } from "./qualify";
 import { demoTripDates, utcDatePlus } from "./demo-clock";
 import { generateTripId } from "./trip-id";
+import { seedEmptyLegs, type EmptyLeg, type LegMessage } from "./empty-legs";
 import type {
   ActivityItem,
   Booking,
@@ -15,7 +16,7 @@ import type {
   QuoteDecision,
 } from "./types";
 
-export const STATE_VERSION = 3;
+export const STATE_VERSION = 4;
 
 export interface AppState {
   version: number;
@@ -27,6 +28,8 @@ export interface AppState {
   proposals: Record<string, Proposal>; // tripId -> proposal
   bookings: Booking[];
   activity: ActivityItem[];
+  emptyLegs: EmptyLeg[];
+  legMessages: LegMessage[];
   // Rolling 30 day counters before today's session, used for automation metrics
   history: { quotesParsed: number; inquiriesQualified: number; rfqsSent: number; proposalsSent: number; bookings: number };
 }
@@ -235,6 +238,9 @@ sam.k@yahoo.com`
     { id: "a10", at: at(52), kind: "booking", text: "Ben Carter booked Challenger 350, DAL to SCF. Margin $3,700", href: "/schedule" },
   ];
 
+  const network = seedEmptyLegs(anchorMs, { name: DEFAULT_SETTINGS.brokerName, company: DEFAULT_SETTINGS.companyName, kind: "Broker" });
+  activity.push({ id: "a11", at: at(3), kind: "ops", text: "Premier Private Jets posted an empty leg FXE to TEB that matches Marcus Delgado's trip", href: "/empty-legs" });
+
   return {
     version: STATE_VERSION,
     anchorMs,
@@ -244,7 +250,9 @@ sam.k@yahoo.com`
     quoteDecisions: {},
     proposals,
     bookings,
-    activity,
+    activity: activity.sort((a, b) => b.at.localeCompare(a.at)),
+    emptyLegs: network.legs,
+    legMessages: network.messages,
     history: { quotesParsed: 286, inquiriesQualified: 74, rfqsSent: 61, proposalsSent: 39, bookings: 17 },
   };
 }

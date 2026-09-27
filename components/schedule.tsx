@@ -2,7 +2,8 @@
 
 import { useMemo, useState } from "react";
 import { addDays, format, parseISO } from "date-fns";
-import { CheckCircle2, Circle, Plane } from "lucide-react";
+import Link from "next/link";
+import { CheckCircle2, Circle, Plane, Repeat } from "lucide-react";
 import { useStore } from "./store-provider";
 import { LoadingBlock, PageHeader, Panel } from "./ui-bits";
 import { getAirportCity, getAirportName, getIATA, distanceNm } from "@/lib/airport-lookup";
@@ -167,6 +168,19 @@ function BookingDetail({ booking: b }: { booking: Booking }) {
         <Money label="Operator" value={b.operatorPrice} />
         <Money label="Margin" value={b.clientPrice - b.operatorPrice} accent />
       </div>
+
+      {stage !== "Flown" && (() => {
+        const posted = store.state.emptyLegs.find((l) => l.sourceBookingId === b.id && l.status !== "Withdrawn");
+        return posted ? (
+          <Link href={`/empty-legs?leg=${posted.id}`} className="mb-4 flex items-center gap-2 rounded-lg border border-emerald-500/20 bg-emerald-500/[0.05] px-3 py-2 text-xs text-emerald-200 hover:bg-emerald-500/10">
+            <Repeat className="h-3.5 w-3.5" /> Empty return posted to the network ({posted.status.toLowerCase()})
+          </Link>
+        ) : (
+          <Link href={`/empty-legs?post=${b.id}`} className="mb-4 flex items-center justify-center gap-2 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs font-medium text-white/75 hover:bg-white/10 hover:text-white">
+            <Repeat className="h-3.5 w-3.5" /> Post empty return {getIATA(b.destination)} to {getIATA(b.origin)} to the network
+          </Link>
+        );
+      })()}
 
       <div className="flex items-center justify-between mb-2">
         <span className="text-xs font-medium text-white/45 uppercase tracking-wider">Ops checklist</span>

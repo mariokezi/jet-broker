@@ -3,15 +3,17 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
-import { LayoutDashboard, Inbox, Plane, CalendarDays, Settings, Plus, Menu, X } from "lucide-react";
+import { LayoutDashboard, Inbox, Plane, CalendarDays, Settings, Plus, Menu, X, Repeat } from "lucide-react";
 import { DataModeToggle } from "./data-mode-toggle";
 import { EmailConnectionStatus } from "./email-connection-status";
 import { useStore } from "./store-provider";
+import { findMatches } from "@/lib/empty-legs";
 
 const NAV = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
   { href: "/inquiries", label: "Inquiries", icon: Inbox },
   { href: "/quotes", label: "Quotes", icon: Plane },
+  { href: "/empty-legs", label: "Empty Legs", icon: Repeat },
   { href: "/schedule", label: "Schedule", icon: CalendarDays },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
@@ -38,6 +40,7 @@ export function AppShell({
     href === "/" ? pathname === "/" : pathname.startsWith(href) || (href === "/quotes" && pathname.startsWith("/trip"));
 
   const newCount = store?.state.inquiries.filter((i) => i.status === "New" || i.status === "Qualified").length ?? 0;
+  const legMatches = store ? findMatches(store.state.emptyLegs, store.state.inquiries).length : 0;
   const company = store?.state.settings.companyName ?? "JetBroker";
 
   return (
@@ -54,7 +57,7 @@ export function AppShell({
                 <div className="text-[10px] text-white/35">Charter Operations</div>
               </div>
             </Link>
-            <nav className="hidden md:flex items-center gap-1">
+            <nav className="hidden md:flex items-center gap-0.5">
               {NAV.map(({ href, label, icon: Icon }) => (
                 <Link
                   key={href}
@@ -65,6 +68,9 @@ export function AppShell({
                 >
                   <Icon className="h-3.5 w-3.5" />
                   {label}
+                  {href === "/empty-legs" && legMatches > 0 && (
+                    <span className="ml-0.5 rounded-full bg-emerald-600 px-1.5 text-[10px] font-semibold text-white tabular-nums">{legMatches}</span>
+                  )}
                   {href === "/inquiries" && newCount > 0 && (
                     <span className="ml-0.5 rounded-full bg-blue-600 px-1.5 text-[10px] font-semibold text-white tabular-nums">{newCount}</span>
                   )}
