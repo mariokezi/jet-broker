@@ -205,7 +205,7 @@ export function parseQuoteFromText(email: RawEmail): ParsedQuote {
     operator,
     quoteSource: "inline",
     externalLink,
-    status: Math.random() > 0.6 ? "Accepted" : "Unanswered",
+    status: "Unanswered",
     receivedAt: email.receivedAt,
     subject: email.subject,
     from: email.from,

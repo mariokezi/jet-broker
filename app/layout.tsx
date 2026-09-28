@@ -1,6 +1,9 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
+import { StoreProvider } from "@/components/store-provider";
+import { AppShell } from "@/components/app-shell";
+import { getDataContext } from "@/lib/data-mode";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -13,21 +16,29 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "JetBroker — Quote Aggregator",
-  description: "Private jet broker quote aggregation dashboard",
+  title: "JetBroker | Charter Operations",
+  description: "Private jet charter brokerage: inquiry qualification, quote aggregation, proposals, and scheduling",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const { mode, outlookLinked } = await getDataContext();
+
   return (
     <html
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased dark`}
     >
-      <body className="min-h-full bg-slate-950 text-white">{children}</body>
+      <body className="min-h-full bg-slate-950 text-white">
+        <StoreProvider mode={mode}>
+          <AppShell mode={mode} outlookLinked={outlookLinked}>
+            {children}
+          </AppShell>
+        </StoreProvider>
+      </body>
     </html>
   );
 }

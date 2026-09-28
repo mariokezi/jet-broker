@@ -13,7 +13,7 @@ const MONTH_NAMES: Record<string, number> = {
   jul: 7, aug: 8, sep: 9, oct: 10, nov: 11, dec: 12,
 };
 
-function parseDate(dateStr: string): string | null {
+export function parseDate(dateStr: string): string | null {
   const currentYear = new Date().getFullYear();
   let match: RegExpMatchArray | null;
 

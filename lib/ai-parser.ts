@@ -35,7 +35,7 @@ Return ONLY a raw JSON object with these fields (use null for anything not found
   "externalLink": string or null (the portal URL),
   "origin": string or null (departure airport — ICAO like KTEB, or IATA like TEB, or city name),
   "destination": string or null (arrival airport — same format),
-  "date": string or null (trip date in YYYY-MM-DD format, assume 2026 if year missing)
+  "date": string or null (trip date in YYYY-MM-DD format; if the year is missing use the next upcoming occurrence of that date)
 }
 
 Return ONLY the JSON object, no explanation.`;
@@ -68,6 +68,7 @@ export async function aiParseEmail(
   if (!client) return null;
 
   const content = [
+    `Today: ${new Date().toISOString().slice(0, 10)}`,
     `Subject: ${subject}`,
     `From: ${fromName}`,
     attachmentFilenames.length ? `Attachments: ${attachmentFilenames.join(", ")}` : "",
