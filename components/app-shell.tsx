@@ -3,23 +3,27 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
-import { LayoutDashboard, Inbox, Plane, CalendarDays, Settings, Plus, Menu, X, Repeat } from "lucide-react";
+import { LayoutDashboard, Inbox, Plane, CalendarDays, Settings, Plus, Menu, X, Repeat, Users, MessageSquare } from "lucide-react";
 import { DataModeToggle } from "./data-mode-toggle";
 import { EmailConnectionStatus } from "./email-connection-status";
 import { useStore } from "./store-provider";
 import { LogoMark } from "./brand";
 import { findMatches } from "@/lib/empty-legs";
+import { unreadIn } from "@/lib/messaging";
+import { AlertToaster } from "./alert-toaster";
 
 const NAV = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
   { href: "/inquiries", label: "Inquiries", icon: Inbox },
+  { href: "/clients", label: "Clients", icon: Users },
   { href: "/quotes", label: "Quotes", icon: Plane },
   { href: "/empty-legs", label: "Empty Legs", icon: Repeat },
   { href: "/schedule", label: "Schedule", icon: CalendarDays },
+  { href: "/messages", label: "Messages", icon: MessageSquare },
 ];
 
 // Routes that render without the broker chrome (client facing or auth)
-const BARE = [/^\/login/, /^\/proposal\//, /^\/request/];
+const BARE = [/^\/login/, /^\/proposal\//, /^\/request/, /^\/seats\//];
 
 export function AppShell({
   children,
@@ -41,6 +45,7 @@ export function AppShell({
 
   const newCount = store?.state.inquiries.filter((i) => i.status === "New" || i.status === "Qualified").length ?? 0;
   const legMatches = store ? findMatches(store.state.emptyLegs, store.state.inquiries).length : 0;
+  const unread = store ? unreadIn(store.state.messages, store.state.readAt, store.now) : 0;
   const settings = store?.state.settings;
   const company = settings?.companyName ?? "JetBroker";
   const broker = settings?.brokerName ?? "";
@@ -49,6 +54,8 @@ export function AppShell({
   const badge = (href: string) =>
     href === "/empty-legs" && legMatches > 0 ? (
       <span className="ml-auto rounded-full bg-gold-100 px-2 py-0.5 text-[11px] font-semibold text-gold-700 tabular-nums">{legMatches}</span>
+    ) : href === "/messages" && unread > 0 ? (
+      <span className="ml-auto rounded-full bg-navy-900 px-2 py-0.5 text-[11px] font-semibold text-white tabular-nums">{unread}</span>
     ) : href === "/inquiries" && newCount > 0 ? (
       <span className="ml-auto rounded-full bg-navy-100 px-2 py-0.5 text-[11px] font-semibold text-navy-800 tabular-nums">{newCount}</span>
     ) : null;
@@ -139,6 +146,7 @@ export function AppShell({
       </header>
 
       <main className="mx-auto max-w-[1320px] px-4 sm:px-6 lg:px-10 py-6 lg:py-10">{children}</main>
+      <AlertToaster />
     </div>
   );
 }

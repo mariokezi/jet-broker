@@ -1,10 +1,12 @@
 "use client";
 
 import { AircraftArt } from "./brand";
+import { SeatSharePanel } from "./seat-share";
+import { createSeatShare, seatStats } from "@/lib/seats";
 import { useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { format, formatDistanceToNow, parseISO, addDays } from "date-fns";
-import { Plane, Plus, Send, Sparkles, Building2, Users, Check, Clock, X, ArrowRight } from "lucide-react";
+import { Armchair, Plane, Plus, Send, Sparkles, Building2, Users, Check, Clock, X, ArrowRight } from "lucide-react";
 import { useStore } from "./store-provider";
 import { LoadingBlock, PageHeader, Panel, TierBadge, btnPrimary, btnSecondary, inputCls } from "./ui-bits";
 import { getAirportCity, getIATA, listAirports } from "@/lib/airport-lookup";
@@ -15,7 +17,7 @@ import { money, moneyK } from "@/lib/money";
 import { charterEstimateFor, findMatches, legRegions, REGION_NAMES, type EmptyLeg, type LegMatch } from "@/lib/empty-legs";
 import type { AircraftCategory, Inquiry } from "@/lib/types";
 
-type Tab = "network" | "mine" | "closed";
+type Tab = "network" | "seats" | "mine" | "closed";
 
 const AIRPORTS = listAirports();
 
@@ -42,7 +44,13 @@ export function EmptyLegsBoard() {
   const { state } = store;
 
   const inTab = (l: EmptyLeg) =>
-    tab === "network" ? !l.isMine && (l.status === "Open" || l.status === "Pending") : tab === "mine" ? l.isMine && l.status !== "Withdrawn" : l.status === "Claimed" || l.status === "Withdrawn";
+    tab === "network"
+      ? !l.isMine && (l.status === "Open" || l.status === "Pending")
+      : tab === "seats"
+        ? !!l.seatShare && l.status === "Open"
+        : tab === "mine"
+          ? l.isMine && l.status !== "Withdrawn"
+          : l.status === "Claimed" || l.status === "Withdrawn";
   const legs = state.emptyLegs
     .filter(inTab)
     .filter((l) => region === "All" || legRegions(l).includes(region))
@@ -88,6 +96,7 @@ export function EmptyLegsBoard() {
         <div className="flex items-center gap-1 rounded-lg border border-slate-200 bg-white p-0.5">
           {([
             ["network", "Network"],
+            ["seats", "Seat shares"],
             ["mine", "My posted legs"],
             ["closed", "Claimed / closed"],
           ] as [Tab, string][]).map(([k, label]) => (
@@ -179,6 +188,7 @@ function LegRow({ leg, active, matchCount, onClick }: { leg: EmptyLeg; active: b
   const store = useStore()!;
   const charter = charterEstimateFor(leg);
   const unread = store.state.legMessages.filter((m) => m.legId === leg.id && !m.fromMe && Date.parse(m.at) <= store.now).length;
+  const seat = leg.seatShare ? seatStats(leg.seatShare) : null;
   return (
     <button
       onClick={onClick}
@@ -193,6 +203,7 @@ function LegRow({ leg, active, matchCount, onClick }: { leg: EmptyLeg; active: b
             <span className="font-semibold text-slate-900">{getIATA(leg.destination)}</span>
             <span className="text-xs text-slate-500">{getAirportCity(leg.origin)} to {getAirportCity(leg.destination)}</span>
             {matchCount > 0 && <span className="rounded bg-emerald-50 px-1.5 py-0.5 text-[10px] font-medium text-emerald-700">{matchCount} client match</span>}
+            {seat && <span className="inline-flex items-center gap-1 rounded bg-gold-100 px-1.5 py-0.5 text-[10px] font-medium text-gold-700"><Armchair className="h-3 w-3" /> By seat · {seat.open} of {seat.total} open</span>}
           </div>
           <div className="text-xs text-slate-500 mt-1">
             {dateRange(leg)} &middot; {leg.aircraft} &middot; {leg.seats} seats
@@ -205,8 +216,17 @@ function LegRow({ leg, active, matchCount, onClick }: { leg: EmptyLeg; active: b
           </div>
         </div>
         <div className="text-right shrink-0">
-          <div className="text-base font-semibold text-slate-900 tabular-nums">{money(leg.askingPrice)}</div>
-          {charter && <div className="text-[11px] text-emerald-700">~{Math.max(0, Math.round((1 - leg.askingPrice / charter) * 100))}% below charter</div>}
+          {seat ? (
+            <>
+              <div className="text-base font-semibold text-slate-900 tabular-nums">from {money(seat.fromPrice)}</div>
+              <div className="text-[11px] text-slate-500">per seat · {money(leg.askingPrice)} whole plane</div>
+            </>
+          ) : (
+            <>
+              <div className="text-base font-semibold text-slate-900 tabular-nums">{money(leg.askingPrice)}</div>
+              {charter && <div className="text-[11px] text-emerald-700">~{Math.max(0, Math.round((1 - leg.askingPrice / charter) * 100))}% below charter</div>}
+            </>
+          )}
           <div className="mt-1.5"><StatusPill leg={leg} /></div>
         </div>
       </div>
@@ -268,6 +288,12 @@ function LegDetail({ leg, matches }: { leg: EmptyLeg; matches: LegMatch[] }) {
         </div>
       </div>
       {leg.notes && <p className="text-xs text-slate-600 mb-3">{leg.notes}</p>}
+      {leg.seatShare && <SeatSharePanel leg={leg} />}
+      {!leg.seatShare && leg.isMine && leg.status === "Open" && (
+        <button onClick={() => store.enableSeatShare(leg.id)} className={`${btnSecondary} w-full mb-3`}>
+          <Armchair className="h-4 w-4" /> Sell this leg by zone and seat
+        </button>
+      )}
 
       {matches.length > 0 && (
         <div className="mb-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs">
@@ -281,7 +307,7 @@ function LegDetail({ leg, matches }: { leg: EmptyLeg; matches: LegMatch[] }) {
         </div>
       )}
 
-      {!leg.isMine && leg.status === "Open" && !claiming && (
+      {!leg.isMine && leg.status === "Open" && !claiming && !leg.seatShare && (
         <button onClick={() => setClaiming(true)} className={`${btnPrimary} w-full mb-3`}>
           <Check className="h-4 w-4" /> Claim this leg for a client
         </button>
@@ -432,6 +458,7 @@ function PostLegDialog({ bookingId, onClose, onPosted }: { bookingId: string | n
   }, [booking]);
 
   const [f, setF] = useState(initial);
+  const [bySeat, setBySeat] = useState(false);
   const set = <K extends keyof typeof f>(k: K, v: (typeof f)[K]) => setF({ ...f, [k]: v });
   const charter = charterEstimateFor({ origin: f.origin, destination: f.destination, category: f.category, seats: f.seats });
   const valid = f.origin && f.destination && f.origin !== f.destination && f.aircraft.trim() && f.price > 0 && f.earliest <= f.latest;
@@ -456,6 +483,7 @@ function PostLegDialog({ bookingId, onClose, onPosted }: { bookingId: string | n
       status: "Open",
       claim: null,
       sourceBookingId: booking?.id ?? null,
+      seatShare: bySeat ? createSeatShare(f.category, f.seats, f.price) : null,
     });
     onPosted(id);
   }
@@ -486,6 +514,13 @@ function PostLegDialog({ bookingId, onClose, onPosted }: { bookingId: string | n
           <div className="flex items-end text-[11px] text-slate-500 pb-2">{charter ? <>Typical charter ~{money(charter)}{f.price > 0 && <span className="text-emerald-700 ml-1">({Math.max(0, Math.round((1 - f.price / charter) * 100))}% below)</span>}</> : null}</div>
         </div>
         <Field label="Notes"><textarea rows={2} className={`${inputCls} mt-0`} value={f.notes} onChange={(e) => set("notes", e.target.value)} /></Field>
+        <label className="mt-3 flex items-start gap-3 rounded-xl border border-gold-200 bg-gold-50/50 p-3 text-sm">
+          <input type="checkbox" className="mt-1" checked={bySeat} onChange={(e) => setBySeat(e.target.checked)} />
+          <span>
+            <span className="font-medium text-navy-900">Sell by zone and seat</span>
+            <span className="block text-xs text-slate-500">Split the cabin into zones (club, conference, divan) and sell seats to different passengers. Full sell out earns about 25% more than the whole plane price.</span>
+          </span>
+        </label>
         <div className="mt-5 flex justify-end gap-2">
           <button onClick={onClose} className={btnSecondary}>Cancel</button>
           <button onClick={post} disabled={!valid} className={btnPrimary}>Post to network</button>

@@ -2,6 +2,7 @@ import { distanceNm, getAirport } from "./airport-lookup";
 import { estimateTrip } from "./fleet";
 import { utcDatePlus } from "./demo-clock";
 import type { AircraftCategory, Inquiry } from "./types";
+import type { SeatShare } from "./seats";
 
 export type LegStatus = "Open" | "Pending" | "Claimed" | "Withdrawn";
 export type PosterKind = "Broker" | "Operator";
@@ -36,6 +37,8 @@ export interface EmptyLeg {
     acceptAt: string; // simulated counterparty acceptance time
   } | null;
   sourceBookingId: string | null;
+  /** When set, the leg is sold by cabin zone or seat instead of as a whole aircraft. */
+  seatShare?: SeatShare | null;
 }
 
 export interface LegMessage {
@@ -93,7 +96,7 @@ export function findMatches(legs: EmptyLeg[], inquiries: Inquiry[]): LegMatch[] 
     if (!inq.origin || !inq.destination || !inq.date) continue;
     if (inq.status === "Booked" || inq.status === "Lost") continue;
     for (const leg of legs) {
-      if (leg.isMine || leg.status !== "Open") continue;
+      if (leg.isMine || leg.status !== "Open" || leg.seatShare) continue;
       if (!near(leg.origin, inq.origin) || !near(leg.destination, inq.destination)) continue;
       if (inq.date < leg.earliest || inq.date > leg.latest) continue;
       if (inq.pax && inq.pax > leg.seats) continue;

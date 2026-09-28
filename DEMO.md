@@ -24,7 +24,16 @@ Back on the Aspen lead, **Save and send RFQ to operators**. Quotes arrive over ~
 ## 7. Schedule (1 min)
 The bookings you just made appear with margin and the ops checklist. On any upcoming booking, click **Post empty return** to list the flight home on the network; another broker replies within seconds.
 
-## 8. Live inbox (optional)
+## 8. Seat shares: sell part of a jet (2 min)
+**Empty Legs** > **Seat shares** tab > the Teterboro to Palm Beach Challenger. The cabin map shows zones (forward club, conference, divan) with sold and open seats, prices per seat and per whole zone, and seat revenue against the whole plane price. Click **Sell seats**, add a name, sell. Then **Open the passenger booking page** to show what a passenger sees, and reserve a seat there. A "Seat sold online" alert pops up.
+
+## 9. Live flight tracking (1 min)
+Reset demo data about 5 minutes before the call. Sophia Martinez is in the air HPN to MIA and lands about 15 minutes after the reset; Victoria Lane departs TEB about 8 minutes after it. The dashboard **Live flights** card shows progress, and alerts pop up at wheels up and landing. The client gets an automatic text and the trip channel logs it. **Schedule** > click the flight for the tracking timeline.
+
+## 10. Messages and clients (2 min)
+**Messages**: the ops room, a channel for each trip, and one thread per client with Email or Text replies. Message Richard Hale; he answers. **Clients** > a client for lifetime spend, trips (including shared flight seats), preferences and recent messages.
+
+## 11. Live inbox (optional)
 Toggle **Live inbox** only if Outlook is connected to an inbox you're comfortable showing.
 
 Note: in demo mode, operator RFQ responses and the other brokers on the Empty Legs network are simulated (the pages say so). Everything else, parsing, scoring, estimates, drafting, is the real pipeline.

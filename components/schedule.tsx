@@ -3,7 +3,11 @@
 import { useMemo, useState } from "react";
 import { addDays, format, parseISO } from "date-fns";
 import Link from "next/link";
-import { CheckCircle2, Circle, Plane, Repeat } from "lucide-react";
+import { CheckCircle2, Circle, MessageSquare, Plane, Repeat } from "lucide-react";
+import { useSearchParams } from "next/navigation";
+import { FlightProgress, FlightStatusPill, TrackingTimeline } from "./flight-tracker";
+import { tripChannelId } from "@/lib/messaging";
+import { flightStatus } from "@/lib/tracking";
 import { useStore } from "./store-provider";
 import { LoadingBlock, PageHeader, Panel } from "./ui-bits";
 import { getAirportCity, getAirportName, getIATA, distanceNm } from "@/lib/airport-lookup";
@@ -29,7 +33,8 @@ const STAGE_STYLE: Record<BookingStage, string> = {
 
 export function Schedule() {
   const store = useStore();
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const params = useSearchParams();
+  const [selectedId, setSelectedId] = useState<string | null>(params.get("b"));
 
   const sorted = useMemo(
     () => (store ? [...store.state.bookings].sort((a, b) => (a.date + a.departureTime).localeCompare(b.date + b.departureTime)) : []),
@@ -117,6 +122,12 @@ function FlightList({ title, bookings, selectedId, onSelect, now }: { title: str
                     <div className="text-xs text-slate-500 truncate">{b.aircraft} {b.tailNumber && `(${b.tailNumber})`} &middot; {b.operator}</div>
                   </div>
                   <div className="text-right shrink-0 space-y-1">
+                    {(() => {
+                      const ph = flightStatus(b, now).phase;
+                      return ph === "Departed" || ph === "Boarding" || (ph === "Landed" && now - flightStatus(b, now).arriveMs < 6 * 3_600_000) ? (
+                        <div><FlightStatusPill booking={b} now={now} /></div>
+                      ) : null;
+                    })()}
                     <span className={`inline-block rounded-full border px-2 py-0.5 text-[10px] font-medium ${STAGE_STYLE[stage]}`}>{stage}</span>
                     <div className="text-[10px] text-slate-500 tabular-nums">{done}/{b.checklist.length} ops</div>
                   </div>
@@ -170,6 +181,24 @@ function BookingDetail({ booking: b }: { booking: Booking }) {
         <Money label="Client" value={b.clientPrice} />
         <Money label="Operator" value={b.operatorPrice} />
         <Money label="Margin" value={b.clientPrice - b.operatorPrice} accent />
+      </div>
+
+      <div className="mb-4 rounded-xl border border-slate-200 p-4">
+        <div className="mb-3 flex items-center justify-between">
+          <span className="text-xs font-medium uppercase tracking-wider text-slate-500">Flight tracking</span>
+          <FlightStatusPill booking={b} now={store.now} />
+        </div>
+        <FlightProgress booking={b} now={store.now} />
+        <div className="mt-4 border-t border-slate-100 pt-4">
+          <TrackingTimeline booking={b} now={store.now} />
+        </div>
+        <label className="mt-4 flex items-center justify-between gap-3 rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600">
+          Text {b.clientName.split(" ")[0]} at wheels up and landing
+          <input type="checkbox" checked={!!b.tracking?.notifyClient} onChange={() => store.toggleNotifyClient(b.id)} className="h-4 w-4 accent-[#0e1f3a]" />
+        </label>
+        <Link href={`/messages?c=${tripChannelId(b.id)}`} className="mt-2 flex items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-navy-900 hover:bg-slate-50">
+          <MessageSquare className="h-3.5 w-3.5" /> Open trip channel
+        </Link>
       </div>
 
       {stage !== "Flown" && (() => {

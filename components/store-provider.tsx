@@ -8,6 +8,11 @@ import { matchOperators, simulateOperatorQuotes } from "@/lib/fleet";
 import { getIATA } from "@/lib/airport-lookup";
 import { simulatedInterest, simulatedReply, type EmptyLeg, type LegMessage, type LegStatus } from "@/lib/empty-legs";
 import { normalizeTime } from "@/lib/time";
+import { flightStatus } from "@/lib/tracking";
+import { createSeatShare, zoneSold } from "@/lib/seats";
+import { clientChannelId, simulatedClientReply, simulatedTeamReply, TEAMMATE, tripChannelId, type ChatMessage, type ChatVia } from "@/lib/messaging";
+import { clientIdFor, type ClientProfile } from "@/lib/clients";
+import type { AppAlert } from "@/lib/demo-seed-extra";
 import type {
   ActivityItem,
   Booking,
@@ -60,6 +65,13 @@ interface StoreApi {
   sendLegMessage: (legId: string, text: string) => void;
   claimLeg: (legId: string, claim: { inquiryId: string | null; clientName: string; clientPrice: number }) => void;
   setLegStatus: (legId: string, status: LegStatus) => void;
+  sendMessage: (channelId: string, text: string, via?: ChatVia) => void;
+  markRead: (channelId: string) => void;
+  sellSeats: (legId: string, sale: { zoneId: string; seats: number; wholeZone: boolean; name: string; email: string | null; phone: string | null; source: "Broker" | "Online" }) => boolean;
+  enableSeatShare: (legId: string) => void;
+  toggleNotifyClient: (bookingId: string) => void;
+  dismissAlert: (id: string) => void;
+  saveClient: (profile: ClientProfile) => void;
 }
 
 const StoreContext = createContext<StoreApi | null>(null);
@@ -193,6 +205,65 @@ export function StoreProvider({ children, mode }: { children: React.ReactNode; m
       };
     });
   }, [now, state]);
+
+  // Flight tracking: departure and landing alerts, team channel updates, and client texts
+  useEffect(() => {
+    if (!state) return;
+    const due = state.bookings.filter((b) => {
+      const st = flightStatus(b, now);
+      const t = b.tracking;
+      return (st.phase === "Departed" && !t?.departedAt) || (st.phase === "Landed" && !t?.landedAt);
+    });
+    if (due.length === 0) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- flight phase transitions on clock tick
+    setState((s) => {
+      if (!s) return s;
+      const at = new Date(now).toISOString();
+      const alerts: AppAlert[] = [];
+      const messages: ChatMessage[] = [];
+      const activity: ActivityItem[] = [];
+      const updated = new Map<string, Booking>();
+      for (const b of due) {
+        const st = flightStatus(b, now);
+        const t = b.tracking ?? { departedAt: null, landedAt: null, notifyClient: false };
+        const route = `${getIATA(b.origin)} to ${getIATA(b.destination)}`;
+        const eta = new Date(st.arriveMs).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+        const clientCh = clientChannelId(clientIdFor(b.clientName));
+        const next = { ...t };
+        // Alert only for changes that just happened; older ones are recorded quietly
+        const recent = (ms: number) => now - ms < 30 * 60_000;
+        if (!t.departedAt && (st.phase === "Departed" || st.phase === "Landed")) {
+          next.departedAt = new Date(st.departMs).toISOString();
+          if (recent(st.departMs) && st.phase === "Departed") {
+            alerts.push({ id: newId("AL"), at, kind: "departed", text: `Wheels up: ${b.clientName}, ${route} (${b.tailNumber ?? b.aircraft}). ETA ${eta}`, href: `/schedule?b=${b.id}`, seen: false });
+            messages.push({ id: newId("M"), channelId: tripChannelId(b.id), at, author: "Flight tracker", role: "system", text: `Departed ${getIATA(b.origin)}. Estimated arrival ${getIATA(b.destination)} at ${eta}.`, via: "app" });
+            activity.push({ id: newId("act"), at, kind: "ops", text: `${b.id} departed ${getIATA(b.origin)}, ETA ${eta}`, href: `/schedule?b=${b.id}` });
+            if (t.notifyClient) messages.push({ id: newId("M"), channelId: clientCh, at, author: s.settings.brokerName, role: "me", text: `Wheels up from ${getIATA(b.origin)}! Estimated arrival in ${getIATA(b.destination)} at ${eta}. Enjoy the flight.`, via: "text" });
+          }
+        }
+        if (!t.landedAt && st.phase === "Landed") {
+          next.landedAt = new Date(st.arriveMs).toISOString();
+          if (recent(st.arriveMs)) {
+            alerts.push({ id: newId("AL"), at, kind: "landed", text: `Landed: ${b.clientName} is on the ground in ${getIATA(b.destination)}`, href: `/schedule?b=${b.id}`, seen: false });
+            messages.push({ id: newId("M"), channelId: tripChannelId(b.id), at, author: "Flight tracker", role: "system", text: `Landed at ${getIATA(b.destination)}. Block time complete.`, via: "app" });
+            activity.push({ id: newId("act"), at, kind: "ops", text: `${b.id} landed at ${getIATA(b.destination)}`, href: `/schedule?b=${b.id}` });
+            if (t.notifyClient) {
+              messages.push({ id: newId("M"), channelId: clientCh, at, author: s.settings.brokerName, role: "me", text: `Welcome to ${getIATA(b.destination)}! You're on the ground. Your car is waiting at the FBO.`, via: "text" });
+              if (mode === "demo") messages.push({ id: newId("M"), channelId: clientCh, at: new Date(now + 6000).toISOString(), author: b.clientName, role: "client", text: "Smooth flight, thank you so much!", via: "text" });
+            }
+          }
+        }
+        updated.set(b.id, { ...b, tracking: next });
+      }
+      return {
+        ...s,
+        bookings: s.bookings.map((b) => updated.get(b.id) ?? b),
+        alerts: [...alerts, ...s.alerts].slice(0, 50),
+        messages: [...s.messages, ...messages],
+        activity: [...activity, ...s.activity],
+      };
+    });
+  }, [now, state, mode]);
 
   const mutate = useCallback((fn: (s: AppState) => AppState) => {
     setState((s) => (s ? fn(s) : s));
@@ -357,6 +428,67 @@ export function StoreProvider({ children, mode }: { children: React.ReactNode; m
         }),
       setLegStatus: (legId, status) =>
         mutate((s) => ({ ...s, emptyLegs: s.emptyLegs.map((l) => (l.id === legId ? { ...l, status } : l)) })),
+      sendMessage: (channelId, text, via = "app") =>
+        mutate((s) => {
+          const nowMs = Date.now();
+          const mine: ChatMessage = { id: newId("M"), channelId, at: new Date(nowMs).toISOString(), author: s.settings.brokerName, role: "me", text, via };
+          const replies: ChatMessage[] = [];
+          if (mode === "demo") {
+            if (channelId.startsWith("client-")) {
+              const client = s.clients.find((c) => clientChannelId(c.id) === channelId);
+              const name = client?.name ?? channelId.replace("client-", "").replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+              replies.push({ id: newId("M"), channelId, at: new Date(nowMs + 3500).toISOString(), author: name, role: "client", text: simulatedClientReply(name.split(" ")[0], text), via });
+            } else {
+              replies.push({ id: newId("M"), channelId, at: new Date(nowMs + 2500).toISOString(), author: TEAMMATE, role: "team", text: simulatedTeamReply(text), via: "app" });
+            }
+          }
+          return { ...s, messages: [...s.messages, mine, ...replies], readAt: { ...s.readAt, [channelId]: new Date(nowMs).toISOString() } };
+        }),
+      markRead: (channelId) =>
+        mutate((s) => (s.readAt[channelId] && s.readAt[channelId] >= new Date(Date.now() - 1000).toISOString() ? s : { ...s, readAt: { ...s.readAt, [channelId]: new Date().toISOString() } })),
+      sellSeats: (legId, sale) => {
+        const leg = state.emptyLegs.find((l) => l.id === legId);
+        const zone = leg?.seatShare?.zones.find((z) => z.id === sale.zoneId);
+        if (!leg?.seatShare || !zone) return false;
+        const open = zone.seats - zoneSold(leg.seatShare, zone.id);
+        const seats = sale.wholeZone ? zone.seats : sale.seats;
+        if (seats < 1 || seats > open || (sale.wholeZone && open !== zone.seats)) return false;
+        const amount = sale.wholeZone ? zone.zonePrice : zone.pricePerSeat * seats;
+        const at = new Date().toISOString();
+        const route = `${getIATA(leg.origin)} to ${getIATA(leg.destination)}`;
+        mutate((s) => ({
+          ...s,
+          emptyLegs: s.emptyLegs.map((l) =>
+            l.id === legId && l.seatShare
+              ? { ...l, seatShare: { ...l.seatShare, sales: [...l.seatShare.sales, { ...sale, id: newId("SS"), seats, amount, at }] } }
+              : l
+          ),
+          alerts:
+            sale.source === "Online"
+              ? [{ id: newId("AL"), at, kind: "seat" as const, text: `Seat sold online: ${sale.name} took ${seats} seat${seats === 1 ? "" : "s"} (${zone.name}) on ${route}`, href: `/empty-legs?leg=${legId}`, seen: false }, ...s.alerts]
+              : s.alerts,
+          activity: [
+            { id: newId("act"), at, kind: "booking", text: `${sale.name} ${sale.wholeZone ? `bought the ${zone.name.toLowerCase()} zone` : `bought ${seats} seat${seats === 1 ? "" : "s"} in ${zone.name.toLowerCase()}`} on ${route}, $${amount.toLocaleString()}`, href: `/empty-legs?leg=${legId}` },
+            ...s.activity,
+          ],
+        }));
+        return true;
+      },
+      enableSeatShare: (legId) =>
+        mutate((s) => ({
+          ...s,
+          emptyLegs: s.emptyLegs.map((l) => (l.id === legId && !l.seatShare ? { ...l, seatShare: createSeatShare(l.category, l.seats, l.askingPrice) } : l)),
+        })),
+      toggleNotifyClient: (bookingId) =>
+        mutate((s) => ({
+          ...s,
+          bookings: s.bookings.map((b) =>
+            b.id === bookingId ? { ...b, tracking: { departedAt: b.tracking?.departedAt ?? null, landedAt: b.tracking?.landedAt ?? null, notifyClient: !b.tracking?.notifyClient } } : b
+          ),
+        })),
+      dismissAlert: (id) => mutate((s) => ({ ...s, alerts: s.alerts.map((a) => (a.id === id ? { ...a, seen: true } : a)) })),
+      saveClient: (profile) =>
+        mutate((s) => ({ ...s, clients: s.clients.some((c) => c.id === profile.id) ? s.clients.map((c) => (c.id === profile.id ? profile : c)) : [profile, ...s.clients] })),
       resetDemo: () => {
         const fresh = createSeedState(Date.now());
         setAnchorCookie(fresh.anchorMs);

@@ -5,6 +5,8 @@ import { useMemo } from "react";
 import { format, formatDistanceToNow, parseISO } from "date-fns";
 import { ArrowRight, ClipboardCheck, Clock, Flame, Mail, Plane, PlaneTakeoff, Plus, Repeat, Sparkles, Timer, TrendingUp, Wallet, Zap } from "lucide-react";
 import { AircraftArt } from "./brand";
+import { LiveFlights } from "./flight-tracker";
+import { flightStatus } from "@/lib/tracking";
 import { categoryFromAircraft } from "@/lib/fleet";
 import { findMatches } from "@/lib/empty-legs";
 import { useStore } from "./store-provider";
@@ -96,7 +98,7 @@ export function Dashboard({ trips, mode }: { trips: Trip[]; mode: "demo" | "live
   const { state } = store;
   const hour = new Date().getHours();
   const greeting = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
-  const next = data.upcoming[0];
+  const next = data.upcoming.find((b) => flightStatus(b, store.now).departMs > store.now);
   const nextCat = next ? categoryFromAircraft(next.aircraft) ?? "Midsize Jet" : null;
 
   return (
@@ -262,6 +264,16 @@ export function Dashboard({ trips, mode }: { trips: Trip[]; mode: "demo" | "live
         </div>
 
         <div className="space-y-6">
+          <Panel
+            title={
+              <span className="flex items-center gap-2">
+                Live flights <span className="h-2 w-2 rounded-full bg-sky-500 animate-pulse" />
+              </span>
+            }
+            action={<Link href="/schedule" className="text-sm font-medium text-navy-700 hover:text-navy-900">Schedule</Link>}
+          >
+            <LiveFlights bookings={state.bookings} now={store.now} />
+          </Panel>
           <Panel title="Hot leads" action={<Link href="/inquiries" className="text-sm font-medium text-navy-700 hover:text-navy-900">View all</Link>}>
             {data.hot.length === 0 ? (
               <p className="text-sm text-slate-500">No hot leads open.</p>

@@ -1,11 +1,11 @@
 import { Suspense } from "react";
-import { Schedule } from "@/components/schedule";
+import { MessagesHub } from "@/components/messages-hub";
 import { LoadingBlock } from "@/components/ui-bits";
 
-export default function SchedulePage() {
+export default function MessagesPage() {
   return (
     <Suspense fallback={<LoadingBlock />}>
-      <Schedule />
+      <MessagesHub />
     </Suspense>
   );
 }

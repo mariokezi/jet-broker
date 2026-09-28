@@ -2,6 +2,9 @@ import { heuristicExtract, qualify } from "./qualify";
 import { demoTripDates, utcDatePlus } from "./demo-clock";
 import { generateTripId } from "./trip-id";
 import { seedEmptyLegs, type EmptyLeg, type LegMessage } from "./empty-legs";
+import { seedClientProfiles, seedLiveBookings, seedMessages, seedSeatLegs, type AppAlert } from "./demo-seed-extra";
+import type { ChatMessage } from "./messaging";
+import type { ClientProfile } from "./clients";
 import type {
   ActivityItem,
   Booking,
@@ -16,7 +19,7 @@ import type {
   QuoteDecision,
 } from "./types";
 
-export const STATE_VERSION = 4;
+export const STATE_VERSION = 5;
 
 export interface AppState {
   version: number;
@@ -30,6 +33,10 @@ export interface AppState {
   activity: ActivityItem[];
   emptyLegs: EmptyLeg[];
   legMessages: LegMessage[];
+  messages: ChatMessage[];
+  readAt: Record<string, string>; // channel id -> last read time
+  clients: ClientProfile[];
+  alerts: AppAlert[];
   // Rolling 30 day counters before today's session, used for automation metrics
   history: { quotesParsed: number; inquiriesQualified: number; rfqsSent: number; proposalsSent: number; bookings: number };
 }
@@ -238,7 +245,16 @@ sam.k@yahoo.com`
     { id: "a10", at: at(52), kind: "booking", text: "Ben Carter booked Challenger 350, DAL to SCF. Margin $3,700", href: "/schedule" },
   ];
 
-  const network = seedEmptyLegs(anchorMs, { name: DEFAULT_SETTINGS.brokerName, company: DEFAULT_SETTINGS.companyName, kind: "Broker" });
+  const me = { name: DEFAULT_SETTINGS.brokerName, company: DEFAULT_SETTINGS.companyName, kind: "Broker" as const };
+  const network = seedEmptyLegs(anchorMs, me);
+  network.legs.unshift(...seedSeatLegs(anchorMs, me));
+  // Past flights already had their alerts; only flights in the demo window alert live
+  for (const b of bookings) {
+    if (b.date < d(0)) b.tracking = { departedAt: at(24), landedAt: at(23), notifyClient: false };
+    else b.tracking = { departedAt: null, landedAt: null, notifyClient: false };
+  }
+  bookings.unshift(...seedLiveBookings(anchorMs, checklistTemplate().map((c) => ({ ...c, done: true }))));
+  activity.push({ id: "a12", at: at(9), kind: "booking", text: "Laura Chen bought the divan zone (3 seats) on your Teterboro to Palm Beach seat share", href: "/empty-legs?leg=EL-3110" });
   activity.push({ id: "a11", at: at(3), kind: "ops", text: "Premier Private Jets posted an empty leg FXE to TEB that matches Marcus Delgado's trip", href: "/empty-legs" });
 
   return {
@@ -253,6 +269,11 @@ sam.k@yahoo.com`
     activity: activity.sort((a, b) => b.at.localeCompare(a.at)),
     emptyLegs: network.legs,
     legMessages: network.messages,
+    messages: seedMessages(anchorMs, DEFAULT_SETTINGS.brokerName),
+    // Richard Hale and Jordan Ellis have unread replies; everything else is caught up
+    readAt: { "team-ops": at(2.7), "trip-BK-1191": at(0.9), "trip-BK-1190": at(25), "client-victoria-lane": at(20), "client-sophia-martinez": at(2.8) },
+    clients: seedClientProfiles(anchorMs),
+    alerts: [],
     history: { quotesParsed: 286, inquiriesQualified: 74, rfqsSent: 61, proposalsSent: 39, bookings: 17 },
   };
 }
