@@ -7,6 +7,7 @@ import { LayoutDashboard, Inbox, Plane, CalendarDays, Settings, Plus, Menu, X, R
 import { DataModeToggle } from "./data-mode-toggle";
 import { EmailConnectionStatus } from "./email-connection-status";
 import { useStore } from "./store-provider";
+import { LogoMark } from "./brand";
 import { findMatches } from "@/lib/empty-legs";
 
 const NAV = [
@@ -15,7 +16,6 @@ const NAV = [
   { href: "/quotes", label: "Quotes", icon: Plane },
   { href: "/empty-legs", label: "Empty Legs", icon: Repeat },
   { href: "/schedule", label: "Schedule", icon: CalendarDays },
-  { href: "/settings", label: "Settings", icon: Settings },
 ];
 
 // Routes that render without the broker chrome (client facing or auth)
@@ -41,78 +41,95 @@ export function AppShell({
 
   const newCount = store?.state.inquiries.filter((i) => i.status === "New" || i.status === "Qualified").length ?? 0;
   const legMatches = store ? findMatches(store.state.emptyLegs, store.state.inquiries).length : 0;
-  const company = store?.state.settings.companyName ?? "JetBroker";
+  const settings = store?.state.settings;
+  const company = settings?.companyName ?? "JetBroker";
+  const broker = settings?.brokerName ?? "";
+  const initials = broker.split(" ").map((p) => p[0]).join("").slice(0, 2).toUpperCase();
+
+  const badge = (href: string) =>
+    href === "/empty-legs" && legMatches > 0 ? (
+      <span className="ml-auto rounded-full bg-gold-100 px-2 py-0.5 text-[11px] font-semibold text-gold-700 tabular-nums">{legMatches}</span>
+    ) : href === "/inquiries" && newCount > 0 ? (
+      <span className="ml-auto rounded-full bg-navy-100 px-2 py-0.5 text-[11px] font-semibold text-navy-800 tabular-nums">{newCount}</span>
+    ) : null;
+
+  const navLinks = (onClick?: () => void) => (
+    <>
+      {NAV.map(({ href, label, icon: Icon }) => (
+        <Link
+          key={href}
+          href={href}
+          onClick={onClick}
+          className={`group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors ${
+            isActive(href) ? "bg-white text-navy-900 shadow-sm ring-1 ring-slate-200" : "text-slate-500 hover:bg-white/70 hover:text-navy-900"
+          }`}
+        >
+          <Icon className={`h-[18px] w-[18px] ${isActive(href) ? "text-gold-600" : "text-slate-400 group-hover:text-navy-700"}`} />
+          {label}
+          {badge(href)}
+        </Link>
+      ))}
+    </>
+  );
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-blue-950">
-      <header className="border-b border-white/5 bg-slate-950/80 backdrop-blur-xl sticky top-0 z-30">
-        <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 h-14 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-6 min-w-0">
-            <Link href="/" className="flex items-center gap-2.5 shrink-0">
-              <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-blue-600/20 border border-blue-500/20">
-                <Plane className="h-4 w-4 text-blue-400" />
-              </div>
-              <div className="leading-tight">
-                <div className="text-sm font-semibold text-white tracking-tight">{company}</div>
-                <div className="text-[10px] text-white/35">Charter Operations</div>
-              </div>
-            </Link>
-            <nav className="hidden md:flex items-center gap-0.5">
-              {NAV.map(({ href, label, icon: Icon }) => (
-                <Link
-                  key={href}
-                  href={href}
-                  className={`relative flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm transition-colors ${
-                    isActive(href) ? "bg-white/[0.07] text-white" : "text-white/45 hover:text-white/80"
-                  }`}
-                >
-                  <Icon className="h-3.5 w-3.5" />
-                  {label}
-                  {href === "/empty-legs" && legMatches > 0 && (
-                    <span className="ml-0.5 rounded-full bg-emerald-600 px-1.5 text-[10px] font-semibold text-white tabular-nums">{legMatches}</span>
-                  )}
-                  {href === "/inquiries" && newCount > 0 && (
-                    <span className="ml-0.5 rounded-full bg-blue-600 px-1.5 text-[10px] font-semibold text-white tabular-nums">{newCount}</span>
-                  )}
-                </Link>
-              ))}
-            </nav>
+    <div className="min-h-screen bg-canvas lg:pl-64">
+      {/* Sidebar */}
+      <aside className="hidden lg:flex fixed inset-y-0 left-0 w-64 flex-col border-r border-slate-200/80 bg-canvas px-4 py-5">
+        <Link href="/" className="flex items-center gap-3 px-2 mb-8">
+          <LogoMark />
+          <div className="leading-tight">
+            <div className="text-[15px] font-semibold text-navy-900 tracking-tight">{company}</div>
+            <div className="text-[11px] text-slate-500">Charter Operations</div>
           </div>
+        </Link>
+        <Link
+          href="/inquiries/new"
+          className="mb-6 flex items-center justify-center gap-2 rounded-xl bg-navy-900 px-3 py-2.5 text-sm font-medium text-white shadow-sm hover:bg-navy-800 transition-colors"
+        >
+          <Plus className="h-4 w-4" /> New Inquiry
+        </Link>
+        <div className="px-3 mb-2 text-[11px] font-medium uppercase tracking-wider text-slate-400">Workspace</div>
+        <nav className="space-y-1">{navLinks()}</nav>
 
-          <div className="flex items-center gap-3">
-            <div className="hidden lg:block">
-              <DataModeToggle mode={mode} outlookLinked={outlookLinked} />
-            </div>
-            <div className="hidden xl:block">
-              <EmailConnectionStatus />
-            </div>
-            <Link
-              href="/inquiries/new"
-              className="hidden sm:inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-500 transition-colors"
-            >
-              <Plus className="h-3.5 w-3.5" />
-              New Inquiry
+        <div className="mt-auto space-y-3">
+          <DataModeToggle mode={mode} outlookLinked={outlookLinked} />
+          <EmailConnectionStatus />
+          <Link
+            href="/settings"
+            className={`flex items-center gap-3 rounded-xl px-2 py-2 transition-colors ${isActive("/settings") ? "bg-white ring-1 ring-slate-200" : "hover:bg-white/70"}`}
+          >
+            <span className="flex h-9 w-9 items-center justify-center rounded-full bg-gold-100 text-xs font-semibold text-gold-700">{initials || "JB"}</span>
+            <span className="min-w-0 flex-1 leading-tight">
+              <span className="block truncate text-sm font-medium text-navy-900">{broker || "Broker"}</span>
+              <span className="block text-[11px] text-slate-500">Settings</span>
+            </span>
+            <Settings className="h-4 w-4 text-slate-400" />
+          </Link>
+        </div>
+      </aside>
+
+      {/* Mobile top bar */}
+      <header className="lg:hidden sticky top-0 z-30 border-b border-slate-200 bg-white/90 backdrop-blur-xl">
+        <div className="flex h-14 items-center justify-between px-4">
+          <Link href="/" className="flex items-center gap-2.5">
+            <LogoMark className="h-8 w-8" />
+            <span className="text-sm font-semibold text-navy-900">{company}</span>
+          </Link>
+          <div className="flex items-center gap-2">
+            <Link href="/inquiries/new" className="inline-flex items-center gap-1 rounded-lg bg-navy-900 px-2.5 py-1.5 text-xs font-medium text-white">
+              <Plus className="h-3.5 w-3.5" /> New
             </Link>
-            <button className="md:hidden text-white/60 p-1" onClick={() => setOpen(!open)} aria-label="Menu">
+            <button className="p-1.5 text-slate-600" onClick={() => setOpen(!open)} aria-label="Menu">
               {open ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
             </button>
           </div>
         </div>
         {open && (
-          <nav className="md:hidden border-t border-white/5 px-4 py-2 space-y-1">
-            {NAV.map(({ href, label, icon: Icon }) => (
-              <Link
-                key={href}
-                href={href}
-                onClick={() => setOpen(false)}
-                className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm ${isActive(href) ? "bg-white/[0.07] text-white" : "text-white/55"}`}
-              >
-                <Icon className="h-4 w-4" />
-                {label}
-              </Link>
-            ))}
-            <Link href="/inquiries/new" onClick={() => setOpen(false)} className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-blue-300">
-              <Plus className="h-4 w-4" /> New Inquiry
+          <nav className="border-t border-slate-200 bg-canvas px-4 py-3 space-y-1">
+            {navLinks(() => setOpen(false))}
+            <Link href="/settings" onClick={() => setOpen(false)} className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-slate-500">
+              <Settings className="h-[18px] w-[18px] text-slate-400" /> Settings
             </Link>
             <div className="pt-2">
               <DataModeToggle mode={mode} outlookLinked={outlookLinked} />
@@ -120,7 +137,8 @@ export function AppShell({
           </nav>
         )}
       </header>
-      <main className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 py-8">{children}</main>
+
+      <main className="mx-auto max-w-[1320px] px-4 sm:px-6 lg:px-10 py-6 lg:py-10">{children}</main>
     </div>
   );
 }

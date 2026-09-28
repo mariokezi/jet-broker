@@ -3,7 +3,7 @@
 Before the call: log in, open **Settings**, click **Reset demo data**. Make sure the header shows **Demo data**. Confirm `ANTHROPIC_API_KEY` is set on the deployment so parsing and drafting show "Claude" instead of "Rules engine".
 
 ## 1. Dashboard (1 min)
-"This is the broker's morning." Point at **Needs your attention**, the pipeline, upcoming flights, and **Hours saved**. Everything else runs on its own.
+"This is the broker's morning." Point at the **Today** list, the headline numbers, the next departure card, the pipeline stages and the route map. Everything else runs on its own.
 
 ## 2. New inquiry, live (3 min)
 **New Inquiry** > click the **Hot: NY to Aspen** sample (or paste an email Vic gives you) > **Qualify and estimate**.

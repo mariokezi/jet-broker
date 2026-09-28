@@ -3,12 +3,14 @@
 import Link from "next/link";
 import { useMemo } from "react";
 import { format, formatDistanceToNow, parseISO } from "date-fns";
-import { AlertTriangle, ArrowRight, Clock, Flame, Mail, PlaneTakeoff, Repeat, Sparkles, Zap } from "lucide-react";
+import { ArrowRight, ClipboardCheck, Clock, Flame, Mail, Plane, PlaneTakeoff, Plus, Repeat, Sparkles, Timer, TrendingUp, Wallet, Zap } from "lucide-react";
+import { AircraftArt } from "./brand";
+import { categoryFromAircraft } from "@/lib/fleet";
 import { findMatches } from "@/lib/empty-legs";
 import { useStore } from "./store-provider";
 import { useMergedTrips } from "./use-trips";
-import { LoadingBlock, Panel, TierBadge } from "./ui-bits";
-import { getIATA } from "@/lib/airport-lookup";
+import { LoadingBlock, Panel, btnPrimary } from "./ui-bits";
+import { getAirport, getAirportCity, getIATA } from "@/lib/airport-lookup";
 import { inquiryTripId } from "@/lib/demo-state";
 import { money, moneyK } from "@/lib/money";
 import type { ActivityItem, InquiryStatus, Trip } from "@/lib/types";
@@ -94,108 +96,153 @@ export function Dashboard({ trips, mode }: { trips: Trip[]; mode: "demo" | "live
   const { state } = store;
   const hour = new Date().getHours();
   const greeting = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
-  const maxFunnel = Math.max(1, ...data.funnel.map((f) => f.count));
+  const next = data.upcoming[0];
+  const nextCat = next ? categoryFromAircraft(next.aircraft) ?? "Midsize Jet" : null;
 
   return (
     <>
-      <div className="flex items-end justify-between gap-4 flex-wrap mb-6">
+      <div className="flex items-end justify-between gap-4 flex-wrap mb-8">
         <div>
-          <h1 className="text-xl font-semibold text-white tracking-tight">
+          <p className="text-sm text-slate-500">{format(new Date(), "EEEE, MMMM d")}</p>
+          <h1 className="mt-1 text-3xl font-semibold text-navy-900 tracking-tight">
             {greeting}, {state.settings.brokerName.split(" ")[0]}
           </h1>
-          <p className="text-sm text-white/40 mt-1">
-            {format(new Date(), "EEEE, MMMM d")} &middot; {data.attention.length} item{data.attention.length === 1 ? "" : "s"} need you. Everything else is running.
+          <p className="text-sm text-slate-500 mt-1.5">
+            {data.attention.length} item{data.attention.length === 1 ? "" : "s"} need you today. Everything else is running on its own.
           </p>
         </div>
-        {mode === "demo" && (
-          <span className="rounded-full border border-amber-500/20 bg-amber-500/[0.06] px-3 py-1 text-[11px] text-amber-300/90">Demo data</span>
+        <div className="flex items-center gap-2">
+          {mode === "demo" && <span className="rounded-full border border-gold-200 bg-gold-50 px-3 py-1 text-xs font-medium text-gold-700">Demo data</span>}
+          <Link href="/inquiries/new" className={btnPrimary}>
+            <Plus className="h-4 w-4" /> New inquiry
+          </Link>
+        </div>
+      </div>
+
+      {/* Headline numbers */}
+      <div className="grid grid-cols-2 xl:grid-cols-4 gap-4 mb-6">
+        <Kpi icon={TrendingUp} label="Pipeline value" value={moneyK(data.pipeline)} sub={`${data.open.length} open leads`} href="/inquiries" />
+        <Kpi icon={Wallet} label="Booked margin, 30 days" value={moneyK(data.margin)} sub={`on ${moneyK(data.revenue)} revenue`} href="/schedule" />
+        <Kpi icon={Flame} label="Hot leads" value={String(data.hot.length)} sub={`${data.quotes24h} quotes parsed today`} href="/inquiries" />
+        <Kpi icon={Timer} label="Hours saved, 30 days" value={`${Math.round(data.minutes / 60)}h`} sub={`about ${Math.round(data.minutes / 60 / 4.3)} hours a week`} gold />
+      </div>
+
+      <div className="grid gap-6 xl:grid-cols-[1fr_380px] mb-6">
+        <Panel
+          title={
+            <span className="flex items-center gap-2">
+              Today <span className="rounded-full bg-navy-50 px-2 py-0.5 text-xs font-semibold text-navy-700 tabular-nums">{data.attention.length}</span>
+            </span>
+          }
+          action={<Link href="/inquiries" className="text-sm font-medium text-navy-700 hover:text-navy-900">All inquiries</Link>}
+        >
+          {data.attention.length === 0 ? (
+            <p className="text-sm text-slate-500 py-6 text-center">You are all caught up. Nothing needs you right now.</p>
+          ) : (
+            <ul className="-mx-2">
+              {data.attention.slice(0, 6).map((a) => (
+                <li key={a.key}>
+                  <Link href={a.href} className="group flex items-center gap-4 rounded-xl px-2 py-3 hover:bg-slate-50 transition-colors">
+                    <AttentionIcon kind={a.icon} />
+                    <div className="min-w-0 flex-1">
+                      <div className="text-sm font-medium text-navy-900">{a.text}</div>
+                      <div className="text-xs text-slate-500 truncate mt-0.5">{a.sub}</div>
+                    </div>
+                    <span className="hidden sm:inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-navy-900 shadow-sm group-hover:border-navy-200 group-hover:bg-navy-50">
+                      {ACTION_LABEL[a.icon]} <ArrowRight className="h-3.5 w-3.5" />
+                    </span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Panel>
+
+        {next && nextCat ? (
+          <Link href="/schedule" className="group relative flex flex-col overflow-hidden rounded-2xl bg-navy-900 p-6 text-white shadow-lg shadow-navy-900/10">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-medium uppercase tracking-wider text-gold-300">Next departure</span>
+              <span className="text-xs text-navy-200">{formatDistanceToNow(parseISO(`${next.date}T${next.departureTime}:00`), { addSuffix: true })}</span>
+            </div>
+            <div className="mt-4 flex items-end justify-between gap-3">
+              <div>
+                <div className="text-3xl font-semibold tracking-tight">{getIATA(next.origin)}</div>
+                <div className="text-xs text-navy-200">{getAirportCity(next.origin)}</div>
+              </div>
+              <div className="mb-3 flex flex-1 items-center gap-1.5 text-gold-300">
+                <span className="h-px flex-1 bg-navy-600" />
+                <Plane className="h-4 w-4" />
+                <span className="h-px flex-1 bg-navy-600" />
+              </div>
+              <div className="text-right">
+                <div className="text-3xl font-semibold tracking-tight">{getIATA(next.destination)}</div>
+                <div className="text-xs text-navy-200">{getAirportCity(next.destination)}</div>
+              </div>
+            </div>
+            <AircraftArt category={nextCat} label={false} className="my-5 flex-1 min-h-36" />
+            <div className="flex items-center justify-between text-sm">
+              <div>
+                <div className="font-medium">{next.clientName}</div>
+                <div className="text-xs text-navy-200">{next.aircraft} &middot; {format(parseISO(next.date), "EEE MMM d")} &middot; {next.departureTime}</div>
+              </div>
+              <div className="text-right">
+                <div className="font-semibold text-gold-300 tabular-nums">+{money(next.clientPrice - next.operatorPrice)}</div>
+                <div className="text-xs text-navy-200">{next.checklist.filter((c) => c.done).length}/{next.checklist.length} ops done</div>
+              </div>
+            </div>
+          </Link>
+        ) : (
+          <Panel title="Next departure">
+            <p className="text-sm text-slate-500">No flights booked in the next 14 days.</p>
+          </Panel>
         )}
       </div>
 
-      <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3 mb-6">
-        <Tile label="Open inquiries" value={String(data.open.length)} sub={`${data.hot.length} hot`} href="/inquiries" />
-        <Tile label="Quotes parsed (24h)" value={String(data.quotes24h)} sub={`${data.allQuotes.length} on the board`} href="/quotes" />
-        <Tile label="Pipeline value" value={moneyK(data.pipeline)} sub="est. retail, open leads" />
-        <Tile label="Upcoming flights" value={String(data.upcoming.length)} sub="next 14 days" href="/schedule" />
-        <Tile label="Booked margin (30d)" value={moneyK(data.margin)} sub={`on ${moneyK(data.revenue)} revenue`} />
-        <Tile label="Hours saved (30d)" value={`${Math.round(data.minutes / 60)}h`} sub={`~${Math.round(data.minutes / 60 / 4.3)}h per week`} accent />
-      </div>
+      {/* Pipeline stages */}
+      <Panel title="Pipeline" action={<span className="text-xs text-slate-500">Click a stage to open it</span>} className="mb-6">
+        <div className="grid grid-cols-3 md:grid-cols-6 gap-2">
+          {data.funnel.map((f, idx) => (
+            <Link
+              key={f.status}
+              href={`/inquiries?tab=${f.status === "New" || f.status === "Qualified" ? "action" : f.status === "Booked" ? "closed" : "active"}`}
+              className="group relative rounded-xl border border-slate-200 bg-slate-50/60 px-3 py-3 hover:border-navy-200 hover:bg-navy-50 transition-colors"
+            >
+              <div className="flex items-center gap-1.5 text-xs font-medium text-slate-500 group-hover:text-navy-700">
+                <span className={`h-2 w-2 rounded-full ${STAGE_DOT[idx]}`} /> {f.status}
+              </div>
+              <div className="mt-1.5 text-2xl font-semibold text-navy-900 tabular-nums">{f.count}</div>
+            </Link>
+          ))}
+        </div>
+      </Panel>
 
-      <div className="grid gap-6 lg:grid-cols-[1fr_360px]">
+      <div className="grid gap-6 xl:grid-cols-[1fr_380px]">
         <div className="space-y-6 min-w-0">
-          <Panel title="Needs your attention" action={<Link href="/inquiries" className="text-xs text-blue-300 hover:text-blue-200">All inquiries</Link>}>
-            {data.attention.length === 0 ? (
-              <p className="text-sm text-white/35 py-4 text-center">Inbox zero. Nothing needs you right now.</p>
-            ) : (
-              <ul className="divide-y divide-white/[0.04]">
-                {data.attention.slice(0, 7).map((a) => (
-                  <li key={a.key}>
-                    <Link href={a.href} className="flex items-center gap-3 py-2.5 group">
-                      <AttentionIcon kind={a.icon} />
-                      <div className="min-w-0">
-                        <div className="text-sm text-white/85 group-hover:text-white">{a.text}</div>
-                        <div className="text-xs text-white/35 truncate">{a.sub}</div>
-                      </div>
-                      <ArrowRight className="h-4 w-4 text-white/15 group-hover:text-white/50 ml-auto shrink-0" />
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </Panel>
-
-          <div className="grid gap-6 md:grid-cols-2">
-            <Panel title="Pipeline">
-              <div className="space-y-2" role="list">
-                {data.funnel.map((f) => (
-                  <div key={f.status} role="listitem" className="grid grid-cols-[96px_1fr_24px] items-center gap-2" title={`${f.status}: ${f.count}`}>
-                    <span className="text-xs text-white/50">{f.status}</span>
-                    <div className="h-4 rounded bg-white/[0.03] overflow-hidden">
-                      <div className="h-full rounded bg-blue-500/70" style={{ width: `${(f.count / maxFunnel) * 100}%`, minWidth: f.count ? 4 : 0 }} />
-                    </div>
-                    <span className="text-xs text-white/70 tabular-nums text-right">{f.count}</span>
-                  </div>
-                ))}
-              </div>
-            </Panel>
-
-            <Panel title="Automated this month">
-              <ul className="space-y-1.5 text-xs">
-                <AutoRow label="Operator quote emails parsed" count={data.counts.quote} mins={MINUTES.quote} />
-                <AutoRow label="Inquiries qualified and priced" count={data.counts.inquiry} mins={MINUTES.inquiry} />
-                <AutoRow label="RFQs routed to operators" count={data.counts.rfq} mins={MINUTES.rfq} />
-                <AutoRow label="Proposals drafted" count={data.counts.proposal} mins={MINUTES.proposal} />
-                <AutoRow label="Bookings with ops checklist" count={data.counts.booking} mins={MINUTES.booking} />
-              </ul>
-              <div className="mt-3 pt-3 border-t border-white/5 flex justify-between text-sm">
-                <span className="text-white/50">Manual work replaced</span>
-                <span className="font-semibold text-emerald-300 tabular-nums">{Math.round(data.minutes / 60)} hours</span>
-              </div>
-            </Panel>
-          </div>
-
-          <Panel title="Upcoming flights" action={<Link href="/schedule" className="text-xs text-blue-300 hover:text-blue-200">Schedule</Link>}>
+          <Panel title="Upcoming flights" action={<Link href="/schedule" className="text-sm font-medium text-navy-700 hover:text-navy-900">Open schedule</Link>}>
+            <RouteMap bookings={data.upcoming} />
             {data.upcoming.length === 0 ? (
-              <p className="text-sm text-white/35">No flights in the next 14 days.</p>
+              <p className="text-sm text-slate-500 mt-4">No flights in the next 14 days.</p>
             ) : (
-              <ul className="divide-y divide-white/[0.04]">
+              <ul className="mt-4 divide-y divide-slate-100">
                 {data.upcoming.slice(0, 5).map((b) => {
                   const done = b.checklist.filter((c) => c.done).length;
                   return (
-                    <li key={b.id} className="flex items-center gap-4 py-2.5">
-                      <div className="w-14 text-center shrink-0">
-                        <div className="text-[10px] uppercase text-white/35">{format(parseISO(b.date), "EEE")}</div>
-                        <div className="text-lg font-semibold text-white leading-tight">{format(parseISO(b.date), "d")}</div>
+                    <li key={b.id} className="flex items-center gap-4 py-3">
+                      <div className="w-12 shrink-0 rounded-xl border border-slate-200 bg-white py-1 text-center">
+                        <div className="text-[10px] font-medium uppercase text-gold-600">{format(parseISO(b.date), "MMM")}</div>
+                        <div className="text-lg font-semibold text-navy-900 leading-tight">{format(parseISO(b.date), "d")}</div>
                       </div>
                       <div className="min-w-0 flex-1">
-                        <div className="text-sm text-white/85">
-                          {getIATA(b.origin)} &rarr; {getIATA(b.destination)} <span className="text-white/35">&middot; {b.departureTime}</span>
+                        <div className="text-sm font-medium text-navy-900">
+                          {getIATA(b.origin)} &rarr; {getIATA(b.destination)} <span className="font-normal text-slate-500">&middot; {b.departureTime} &middot; {b.clientName}</span>
                         </div>
-                        <div className="text-xs text-white/35 truncate">{b.clientName} &middot; {b.aircraft} ({b.tailNumber}) &middot; {b.operator}</div>
+                        <div className="text-xs text-slate-500 truncate">{b.aircraft} {b.tailNumber ? `(${b.tailNumber})` : ""} &middot; {b.operator}</div>
                       </div>
                       <div className="text-right shrink-0">
-                        <div className="text-xs tabular-nums text-white/60">{done}/{b.checklist.length} ops</div>
-                        <div className="text-[11px] text-emerald-300/80 tabular-nums">+{money(b.clientPrice - b.operatorPrice)}</div>
+                        <div className="mb-1 h-1.5 w-20 overflow-hidden rounded-full bg-slate-100">
+                          <div className="h-full rounded-full bg-emerald-500" style={{ width: `${(done / b.checklist.length) * 100}%` }} />
+                        </div>
+                        <div className="text-xs font-medium text-emerald-700 tabular-nums">+{money(b.clientPrice - b.operatorPrice)}</div>
                       </div>
                     </li>
                   );
@@ -203,25 +250,35 @@ export function Dashboard({ trips, mode }: { trips: Trip[]; mode: "demo" | "live
               </ul>
             )}
           </Panel>
+          <Panel title="Automated this month">
+            <ul className="grid gap-x-8 gap-y-2 text-sm sm:grid-cols-2">
+              <AutoRow label="Quote emails parsed" count={data.counts.quote} mins={MINUTES.quote} />
+              <AutoRow label="Inquiries qualified" count={data.counts.inquiry} mins={MINUTES.inquiry} />
+              <AutoRow label="RFQs sent" count={data.counts.rfq} mins={MINUTES.rfq} />
+              <AutoRow label="Proposals drafted" count={data.counts.proposal} mins={MINUTES.proposal} />
+              <AutoRow label="Bookings tracked" count={data.counts.booking} mins={MINUTES.booking} />
+            </ul>
+          </Panel>
         </div>
 
         <div className="space-y-6">
-          <Panel title="Hot leads">
+          <Panel title="Hot leads" action={<Link href="/inquiries" className="text-sm font-medium text-navy-700 hover:text-navy-900">View all</Link>}>
             {data.hot.length === 0 ? (
-              <p className="text-sm text-white/35">No hot leads open.</p>
+              <p className="text-sm text-slate-500">No hot leads open.</p>
             ) : (
-              <ul className="space-y-2">
+              <ul className="-mx-2 space-y-1">
                 {data.hot.slice(0, 5).map((i) => (
                   <li key={i.id}>
-                    <Link href={`/inquiries/${i.id}`} className="flex items-center justify-between gap-2 rounded-lg px-2 py-1.5 -mx-2 hover:bg-white/[0.03]">
-                      <div className="min-w-0">
-                        <div className="text-sm text-white/85 truncate">{i.clientName}</div>
-                        <div className="text-[11px] text-white/35">
-                          {i.origin && i.destination ? `${getIATA(i.origin)} → ${getIATA(i.destination)}` : "Route TBD"}
+                    <Link href={`/inquiries/${i.id}`} className="flex items-center gap-3 rounded-xl px-2 py-2 hover:bg-slate-50">
+                      <Avatar name={i.clientName ?? "?"} />
+                      <div className="min-w-0 flex-1">
+                        <div className="text-sm font-medium text-navy-900 truncate">{i.clientName}</div>
+                        <div className="text-xs text-slate-500">
+                          {i.origin && i.destination ? `${getIATA(i.origin)} to ${getIATA(i.destination)}` : "Route TBD"}
                           {i.date ? ` · ${format(parseISO(i.date), "MMM d")}` : ""}
                         </div>
                       </div>
-                      <TierBadge tier={i.qualification.tier} score={i.qualification.score} />
+                      <ScoreRing score={i.qualification.score} />
                     </Link>
                   </li>
                 ))}
@@ -229,9 +286,10 @@ export function Dashboard({ trips, mode }: { trips: Trip[]; mode: "demo" | "live
             )}
           </Panel>
 
+
           <Panel title="Live activity">
-            <ul className="space-y-3">
-              {state.activity.slice(0, 10).map((a) => (
+            <ul className="space-y-4">
+              {state.activity.slice(0, 8).map((a) => (
                 <ActivityRow key={a.id} a={a} />
               ))}
             </ul>
@@ -242,23 +300,95 @@ export function Dashboard({ trips, mode }: { trips: Trip[]; mode: "demo" | "live
   );
 }
 
-function Tile({ label, value, sub, href, accent }: { label: string; value: string; sub: string; href?: string; accent?: boolean }) {
+const ACTION_LABEL = { hot: "Send RFQ", rfq: "Open", proposal: "Build proposal", ops: "Review", leg: "View leg" } as const;
+const STAGE_DOT = ["bg-slate-400", "bg-violet-500", "bg-navy-500", "bg-cyan-500", "bg-gold-500", "bg-emerald-500"];
+
+function Kpi({ icon: Icon, label, value, sub, href, gold }: { icon: typeof Flame; label: string; value: string; sub: string; href?: string; gold?: boolean }) {
   const inner = (
-    <div className={`h-full rounded-xl border p-4 transition-colors ${accent ? "border-emerald-500/20 bg-emerald-500/[0.05]" : "border-white/[0.06] bg-white/[0.02]"} ${href ? "hover:bg-white/[0.04]" : ""}`}>
-      <div className="text-[11px] text-white/40">{label}</div>
-      <div className={`text-2xl font-semibold tracking-tight mt-1 tabular-nums ${accent ? "text-emerald-300" : "text-white"}`}>{value}</div>
-      <div className="text-[11px] text-white/35 mt-0.5">{sub}</div>
+    <div
+      className={`h-full rounded-2xl border p-5 transition-all ${
+        gold ? "border-gold-200 bg-gradient-to-br from-gold-50 to-white" : "border-slate-200/80 bg-white"
+      } shadow-[0_1px_2px_rgba(14,31,58,0.04)] ${href ? "hover:shadow-md hover:border-slate-300" : ""}`}
+    >
+      <div className="flex items-center justify-between">
+        <span className="text-sm text-slate-500">{label}</span>
+        <span className={`flex h-9 w-9 items-center justify-center rounded-full ${gold ? "bg-gold-100 text-gold-700" : "bg-navy-50 text-navy-700"}`}>
+          <Icon className="h-[18px] w-[18px]" />
+        </span>
+      </div>
+      <div className={`mt-2 text-3xl font-semibold tracking-tight tabular-nums ${gold ? "text-gold-700" : "text-navy-900"}`}>{value}</div>
+      <div className="mt-1 text-xs text-slate-500">{sub}</div>
     </div>
   );
   return href ? <Link href={href}>{inner}</Link> : inner;
 }
 
+function Avatar({ name }: { name: string }) {
+  const initials = name.split(" ").map((p) => p[0]).join("").slice(0, 2).toUpperCase();
+  return <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-navy-50 text-xs font-semibold text-navy-700">{initials}</span>;
+}
+
+export function ScoreRing({ score, size = 36 }: { score: number; size?: number }) {
+  const r = size / 2 - 3;
+  const c = 2 * Math.PI * r;
+  const color = score >= 70 ? "#e11d48" : score >= 45 ? "#d97706" : "#0284c7";
+  return (
+    <span className="relative inline-flex shrink-0" style={{ width: size, height: size }} title={`Lead score ${score}`}>
+      <svg width={size} height={size} className="-rotate-90">
+        <circle cx={size / 2} cy={size / 2} r={r} stroke="#eef1f6" strokeWidth="3" fill="none" />
+        <circle cx={size / 2} cy={size / 2} r={r} stroke={color} strokeWidth="3" fill="none" strokeDasharray={c} strokeDashoffset={c * (1 - score / 100)} strokeLinecap="round" />
+      </svg>
+      <span className="absolute inset-0 flex items-center justify-center text-[11px] font-semibold text-navy-900 tabular-nums">{score}</span>
+    </span>
+  );
+}
+
+function RouteMap({ bookings }: { bookings: { id: string; origin: string; destination: string }[] }) {
+  // Simple equirectangular projection over North America and the Caribbean
+  const W = 800, H = 300;
+  const proj = (lat: number, lon: number) => [((lon + 126) / 62) * W, ((50 - lat) / 32) * H] as const;
+  const dots: { x: number; y: number }[] = [];
+  for (let x = 12; x < W; x += 16) for (let y = 12; y < H; y += 16) dots.push({ x, y });
+  const routes = bookings
+    .map((b) => ({ b, o: getAirport(b.origin), d: getAirport(b.destination) }))
+    .filter((r) => r.o && r.d);
+  const airports = new Map<string, { x: number; y: number; code: string }>();
+  for (const r of routes) {
+    for (const a of [r.o!, r.d!]) {
+      const [x, y] = proj(a.lat, a.lon);
+      airports.set(a.icao, { x, y, code: a.iata });
+    }
+  }
+  return (
+    <div className="overflow-hidden rounded-xl border border-slate-100 bg-gradient-to-b from-navy-50/70 to-white">
+      <svg viewBox={`0 0 ${W} ${H}`} className="h-48 w-full sm:h-56" preserveAspectRatio="xMidYMid slice" aria-label="Route map of upcoming flights">
+        {dots.map((d, i) => (
+          <circle key={i} cx={d.x} cy={d.y} r="1.2" fill="#c7d3e6" />
+        ))}
+        {routes.map(({ b, o, d }) => {
+          const [x1, y1] = proj(o!.lat, o!.lon);
+          const [x2, y2] = proj(d!.lat, d!.lon);
+          const mx = (x1 + x2) / 2, my = (y1 + y2) / 2 - Math.hypot(x2 - x1, y2 - y1) * 0.25;
+          return <path key={b.id} d={`M${x1} ${y1} Q ${mx} ${my} ${x2} ${y2}`} stroke="#b88d38" strokeWidth="2" fill="none" strokeDasharray="5 5" />;
+        })}
+        {[...airports.values()].map((a) => (
+          <g key={a.code}>
+            <circle cx={a.x} cy={a.y} r="9" fill="#0e1f3a" opacity="0.08" />
+            <circle cx={a.x} cy={a.y} r="4.5" fill="#0e1f3a" stroke="#fff" strokeWidth="2" />
+            <text x={a.x + 9} y={a.y - 7} fontSize="13" fontWeight="600" fill="#0e1f3a">{a.code}</text>
+          </g>
+        ))}
+      </svg>
+    </div>
+  );
+}
+
 function AutoRow({ label, count, mins }: { label: string; count: number; mins: number }) {
   return (
     <li className="flex items-center justify-between gap-2">
-      <span className="text-white/55">{label}</span>
-      <span className="tabular-nums text-white/80">
-        {count} <span className="text-white/25">&times; {mins}m</span>
+      <span className="text-slate-600">{label}</span>
+      <span className="tabular-nums font-medium text-navy-900">
+        {count} <span className="font-normal text-slate-400">&times; {mins} min</span>
       </span>
     </li>
   );
@@ -266,15 +396,15 @@ function AutoRow({ label, count, mins }: { label: string; count: number; mins: n
 
 function AttentionIcon({ kind }: { kind: "hot" | "rfq" | "proposal" | "ops" | "leg" }) {
   const map = {
-    hot: { Icon: Flame, cls: "bg-rose-500/10 text-rose-300 border-rose-500/20" },
-    rfq: { Icon: Mail, cls: "bg-violet-500/10 text-violet-300 border-violet-500/20" },
-    proposal: { Icon: Sparkles, cls: "bg-cyan-500/10 text-cyan-300 border-cyan-500/20" },
-    ops: { Icon: AlertTriangle, cls: "bg-amber-500/10 text-amber-300 border-amber-500/20" },
-    leg: { Icon: Repeat, cls: "bg-emerald-500/10 text-emerald-300 border-emerald-500/20" },
+    hot: { Icon: Flame, cls: "bg-rose-50 text-rose-600" },
+    rfq: { Icon: Mail, cls: "bg-violet-50 text-violet-600" },
+    proposal: { Icon: Sparkles, cls: "bg-navy-50 text-navy-700" },
+    ops: { Icon: ClipboardCheck, cls: "bg-amber-50 text-amber-600" },
+    leg: { Icon: Repeat, cls: "bg-gold-100 text-gold-700" },
   }[kind];
   return (
-    <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border ${map.cls}`}>
-      <map.Icon className="h-4 w-4" />
+    <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full ${map.cls}`}>
+      <map.Icon className="h-[18px] w-[18px]" />
     </span>
   );
 }
@@ -282,11 +412,13 @@ function AttentionIcon({ kind }: { kind: "hot" | "rfq" | "proposal" | "ops" | "l
 function ActivityRow({ a }: { a: ActivityItem }) {
   const Icon = a.kind === "booking" ? PlaneTakeoff : a.kind === "quote" ? Zap : a.kind === "ops" ? Clock : a.kind === "inquiry" ? Mail : Sparkles;
   const content = (
-    <div className="flex gap-2.5">
-      <Icon className="h-3.5 w-3.5 text-white/30 mt-0.5 shrink-0" />
+    <div className="flex gap-3">
+      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-500">
+        <Icon className="h-3.5 w-3.5" />
+      </span>
       <div className="min-w-0">
-        <div className="text-xs text-white/70 leading-snug">{a.text}</div>
-        <div className="text-[10px] text-white/30 mt-0.5">{formatDistanceToNow(parseISO(a.at), { addSuffix: true })}</div>
+        <div className="text-sm text-slate-700 leading-snug">{a.text}</div>
+        <div className="text-xs text-slate-400 mt-0.5">{formatDistanceToNow(parseISO(a.at), { addSuffix: true })}</div>
       </div>
     </div>
   );

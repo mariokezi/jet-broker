@@ -2,7 +2,8 @@
 
 import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Plane, Lock, ArrowRight, Loader2 } from "lucide-react";
+import { Lock, ArrowRight, Loader2 } from "lucide-react";
+import { AircraftArt, LogoMark } from "@/components/brand";
 
 function LoginForm() {
   const [password, setPassword] = useState("");
@@ -40,10 +41,10 @@ function LoginForm() {
 
   return (
     <form onSubmit={handleSubmit}>
-      <div className="rounded-2xl border border-white/10 bg-white/5 backdrop-blur-xl p-6 shadow-2xl">
+      <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-[0_8px_30px_-12px_rgba(14,31,58,0.15)]">
         <div className="flex items-center gap-2 mb-4">
-          <Lock className="h-4 w-4 text-white/40" />
-          <span className="text-sm font-medium text-white/60">Enter password</span>
+          <Lock className="h-4 w-4 text-slate-500" />
+          <span className="text-sm font-medium text-slate-600">Enter password</span>
         </div>
 
         <input
@@ -52,17 +53,17 @@ function LoginForm() {
           onChange={(e) => setPassword(e.target.value)}
           placeholder="Password"
           autoFocus
-          className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white placeholder:text-white/30 outline-none focus:border-blue-500/50 focus:ring-2 focus:ring-blue-500/20 transition-all"
+          className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 placeholder:text-slate-400 outline-none focus:border-navy-300 focus:ring-2 focus:ring-navy-200 transition-all"
         />
 
         {error && (
-          <p className="text-red-400 text-xs mt-2">{error}</p>
+          <p className="text-red-700 text-xs mt-2">{error}</p>
         )}
 
         <button
           type="submit"
           disabled={loading || !password}
-          className="mt-4 w-full flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-3 text-sm font-medium text-white hover:bg-blue-500 disabled:opacity-40 disabled:hover:bg-blue-600 transition-colors"
+          className="mt-4 w-full flex items-center justify-center gap-2 rounded-xl bg-navy-900 px-4 py-3 text-sm font-medium text-white hover:bg-navy-800 disabled:opacity-40 disabled:hover:bg-navy-800 transition-colors"
         >
           {loading ? (
             <Loader2 className="h-4 w-4 animate-spin" />
@@ -80,25 +81,35 @@ function LoginForm() {
 
 export default function LoginPage() {
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-950 via-slate-900 to-blue-950">
-      {/* Subtle grid background */}
-      <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PGRlZnM+PHBhdHRlcm4gaWQ9ImdyaWQiIHdpZHRoPSI2MCIgaGVpZ2h0PSI2MCIgcGF0dGVyblVuaXRzPSJ1c2VyU3BhY2VPblVzZSI+PHBhdGggZD0iTSA2MCAwIEwgMCAwIDAgNjAiIGZpbGw9Im5vbmUiIHN0cm9rZT0icmdiYSgyNTUsMjU1LDI1NSwwLjAzKSIgc3Ryb2tlLXdpZHRoPSIxIi8+PC9wYXR0ZXJuPjwvZGVmcz48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSJ1cmwoI2dyaWQpIi8+PC9zdmc+')] opacity-50" />
-
-      <div className="relative w-full max-w-sm mx-4">
-        {/* Logo area */}
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-blue-600/20 border border-blue-500/20 mb-4">
-            <Plane className="h-7 w-7 text-blue-400" />
-          </div>
-          <h1 className="text-2xl font-semibold text-white tracking-tight">
-            JetBroker
-          </h1>
-          <p className="text-sm text-white/40 mt-1">Quote Aggregator</p>
+    <div className="min-h-screen grid lg:grid-cols-2 bg-canvas">
+      <div className="relative hidden lg:flex flex-col justify-between overflow-hidden bg-navy-900 p-12 text-white">
+        <div className="flex items-center gap-3">
+          <LogoMark className="h-10 w-10" />
+          <span className="text-lg font-semibold tracking-tight">JetBroker</span>
         </div>
+        <div>
+          <AircraftArt category="Heavy Jet" label={false} className="mb-10 h-56 opacity-95" />
+          <h2 className="text-3xl font-semibold tracking-tight leading-tight">
+            Every inquiry qualified, quoted
+            <br />
+            and scheduled <span className="text-gold-300">without manual work.</span>
+          </h2>
+          <p className="mt-4 max-w-md text-sm text-navy-200">Charter operations for private aviation brokers: lead scoring, operator sourcing, proposals, empty legs and ops in one place.</p>
+        </div>
+        <p className="text-xs text-navy-300">Private and confidential</p>
+      </div>
 
-        <Suspense fallback={null}>
-          <LoginForm />
-        </Suspense>
+      <div className="flex items-center justify-center p-6">
+        <div className="w-full max-w-sm">
+          <div className="mb-8">
+            <LogoMark className="h-11 w-11 lg:hidden mb-6" />
+            <h1 className="text-2xl font-semibold text-navy-900 tracking-tight">Welcome back</h1>
+            <p className="text-sm text-slate-500 mt-1">Sign in to your charter workspace.</p>
+          </div>
+          <Suspense fallback={null}>
+            <LoginForm />
+          </Suspense>
+        </div>
       </div>
     </div>
   );

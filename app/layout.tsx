@@ -30,9 +30,9 @@ export default async function RootLayout({
   return (
     <html
       lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased dark`}
+      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full bg-slate-950 text-white">
+      <body className="min-h-full bg-canvas text-slate-900">
         <StoreProvider mode={mode}>
           <AppShell mode={mode} outlookLinked={outlookLinked}>
             {children}
