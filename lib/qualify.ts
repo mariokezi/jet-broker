@@ -174,6 +174,11 @@ export function heuristicExtract(text: string, now = new Date()): InquiryFields 
     if (dash) clientName = dash[1];
   }
   if (clientName && !company) {
+    const esc = clientName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const from = text.match(new RegExp(`${esc}\\s+(?:from|at|with|of)\\s+([A-Z][\\w&']*(?: [A-Z][\\w&']*){0,3})`));
+    if (from) company = from[1];
+  }
+  if (clientName && !company) {
     const afterName = text.split(clientName)[1]?.split("\n").map((l) => l.trim()).filter(Boolean)[0];
     if (afterName && afterName.length < 50 && !afterName.includes("@") && !/\d{3}/.test(afterName)) {
       company = afterName;
@@ -199,12 +204,17 @@ export function heuristicExtract(text: string, now = new Date()): InquiryFields 
   }
 
   let budget: number | null = null;
-  const budgetMatch = text.match(/(?:budget|spend|around|up to|max(?:imum)?|under)[^$\d]{0,20}\$\s?([\d,.]+)\s*(k|K)?/)
-    ?? text.match(/\$\s?([\d,.]+)\s*(k|K)?\s*(?:budget|max|all[\s-]in)/);
-  if (budgetMatch) {
-    const n = parseFloat(budgetMatch[1].replace(/,/g, ""));
-    budget = budgetMatch[2] ? n * 1000 : n;
-    if (budget < 1000) budget = null;
+  const budgetMatches = [
+    ...text.matchAll(/(?:budget|spend|around|up to|max(?:imum)?|under)[^$\d\n]{0,20}\$?\s?([\d,.]+)\s*(k|K)?/gi),
+    ...text.matchAll(/\$\s?([\d,.]+)\s*(k|K)?\s*(?:budget|max|all[\s-]in)/gi),
+  ];
+  for (const m of budgetMatches) {
+    const n = parseFloat(m[1].replace(/,/g, ""));
+    const value = m[2] ? n * 1000 : n;
+    if (value >= 1000) {
+      budget = value;
+      break;
+    }
   }
 
   const time = text.match(/\b(\d{1,2}(?::\d{2})?\s?(?:am|pm))\b/i)?.[1]

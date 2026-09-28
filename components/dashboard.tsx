@@ -74,7 +74,7 @@ export function Dashboard({ trips, mode }: { trips: Trip[]; mode: "demo" | "live
         attention.push({ key: i.id, icon: i.qualification.tier === "Hot" ? "hot" : "rfq", text: `Send RFQ for ${i.clientName ?? "lead"}`, sub: `${getIATA(i.origin!)} to ${getIATA(i.destination!)} · score ${i.qualification.score}`, href: `/inquiries/${i.id}` });
       } else if (i.status === "Quoted" && tripId && !state.proposals[tripId]) {
         const n = merged.find((t) => t.tripId === tripId)?.quotes.length ?? 0;
-        attention.push({ key: i.id, icon: "proposal", text: `Send proposal to ${i.clientName ?? "client"}`, sub: `${n} quotes ranked · ${getIATA(i.origin!)} to ${getIATA(i.destination!)}`, href: `/trip/${tripId}` });
+        attention.push({ key: i.id, icon: "proposal", text: `Send proposal to ${i.clientName ?? "client"}`, sub: `${n ? `${n} quotes ranked` : "Quotes in"} · ${getIATA(i.origin!)} to ${getIATA(i.destination!)}`, href: `/trip/${tripId}` });
       } else if (i.status === "New" && i.qualification.missing.length) {
         attention.push({ key: i.id, icon: "rfq", text: `Follow up with ${i.clientName ?? "lead"}`, sub: `Missing ${i.qualification.missing.join(", ").toLowerCase()}`, href: `/inquiries/${i.id}` });
       }
