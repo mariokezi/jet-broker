@@ -23,7 +23,7 @@ const NAV = [
 ];
 
 // Routes that render without the broker chrome (client facing or auth)
-const BARE = [/^\/login/, /^\/proposal\//, /^\/request/, /^\/seats\//];
+const BARE = [/^\/login/, /^\/proposal\//, /^\/request/, /^\/seats\//, /^\/connect/];
 
 export function AppShell({
   children,

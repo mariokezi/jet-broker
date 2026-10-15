@@ -19,7 +19,7 @@ import type {
   QuoteDecision,
 } from "./types";
 
-export const STATE_VERSION = 5;
+export const STATE_VERSION = 6;
 
 export interface AppState {
   version: number;

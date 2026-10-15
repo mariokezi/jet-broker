@@ -84,7 +84,7 @@ export default function LoginPage() {
     <div className="min-h-screen grid lg:grid-cols-2 bg-canvas">
       <div className="relative hidden lg:flex flex-col justify-between overflow-hidden bg-navy-900 p-12 text-white">
         <div className="flex items-center gap-3">
-          <LogoMark className="h-10 w-10" />
+          <LogoMark className="h-10 w-10 rounded-[11px] ring-1 ring-white/25" />
           <span className="text-lg font-semibold tracking-tight">JetBroker</span>
         </div>
         <div>

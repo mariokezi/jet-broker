@@ -9,6 +9,11 @@ export function DataModeToggle({ mode, outlookLinked }: { mode: "demo" | "live";
   const [pending, startTransition] = useTransition();
 
   function choose(next: "demo" | "live") {
+    // No inbox linked yet: send them to sign in instead of an empty live view
+    if (next === "live" && !outlookLinked) {
+      router.push("/connect");
+      return;
+    }
     document.cookie = `${DATA_MODE_COOKIE}=${next}; path=/; max-age=${60 * 60 * 24 * 365}; samesite=lax`;
     startTransition(() => router.refresh());
   }
