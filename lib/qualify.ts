@@ -44,7 +44,7 @@ function findDate(text: string, base: Date): string | null {
   return parseDate(text) ?? parseRelativeDate(text, base);
 }
 
-function extractRoute(text: string): { origin: string | null; destination: string | null } {
+export function extractRoute(text: string): { origin: string | null; destination: string | null } {
   // "from X to Y" with airport codes or city names
   const fromTo = text.match(/\bfrom\s+([A-Za-z .'-]{2,40}?)\s+(?:to|into|->|>)\s+([A-Za-z .'-]{2,40}?)(?=[\s,.;!?]|$)/i);
   if (fromTo) {

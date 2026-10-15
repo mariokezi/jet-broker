@@ -5,16 +5,19 @@ import { AutoRefresh } from "./auto-refresh";
 import { PageHeader } from "./ui-bits";
 import { useMergedTrips } from "./use-trips";
 import type { Trip, UnmatchedEmail } from "@/lib/types";
+import type { ScanStats } from "@/lib/trip-builder";
 
 export function QuotesBoard({
   trips,
   unmatched,
+  stats,
   error,
   mode,
   outlookLinked,
 }: {
   trips: Trip[];
   unmatched: UnmatchedEmail[];
+  stats?: ScanStats | null;
   error: string | null;
   mode: "demo" | "live";
   outlookLinked: boolean;
@@ -30,6 +33,15 @@ export function QuotesBoard({
       />
 
       <AutoRefresh intervalMs={60_000} />
+
+      {mode === "live" && outlookLinked && stats && (
+        <div className="mb-6 flex flex-wrap items-center gap-x-6 gap-y-1 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
+          <span className="font-medium">Live inbox</span>
+          <span>Read {stats.scanned.toLocaleString()} emails from the last 30 days</span>
+          <span>{stats.quotes} recognized as operator quotes</span>
+          <span className="text-emerald-700">Newsletters, receipts, airline bookings and client requests are skipped</span>
+        </div>
+      )}
 
       {error && (
         <div className="rounded-xl border border-red-200 bg-red-50 p-6 mb-6">

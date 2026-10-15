@@ -1,53 +1,19 @@
 import "server-only";
+import crypto from "crypto";
 import { fetchQuoteEmails } from "./o365-client";
-import { parseSubject, buildTripKey, type ParsedSubject } from "./subject-parser";
-import { parseQuoteFromText, parseQuoteFromPDF } from "./quote-parser";
+import { buildTripKey, type ParsedSubject } from "./subject-parser";
+import { emailText, extractTrip, isQuote, parseQuoteEmail } from "./email-pipeline";
+import { getStoredAccount, getStoredRefreshToken } from "./auth";
 import { aiParseEmail, isAiEnabled } from "./ai-parser";
-import { getAirportName, resolveToICAO } from "./airport-lookup";
+import { getAirportName } from "./airport-lookup";
 import { getDataContext } from "./data-mode";
 import { loadSeedEmails } from "./seed-data";
 import { generateTripId } from "./trip-id";
 import type { Trip, ParsedQuote, RawEmail, UnmatchedEmail } from "./types";
 
-const IGNORED_SENDERS = [
-  "microsoft.com",
-  "microsoftonline.com",
-  "accountprotection.microsoft.com",
-  "notificationemails.microsoft.com",
-];
-
-function isSystemEmail(email: RawEmail): boolean {
-  const from = email.from.toLowerCase();
-  return IGNORED_SENDERS.some((domain) => from.endsWith(domain));
-}
-
 async function extractPdfText(base64Data: string): Promise<string | null> {
   const { extractTextFromPdf } = await import("./pdf-extract");
   return extractTextFromPdf(base64Data);
-}
-
-function parseRouteFromFilename(filename: string): { origin: string | null; destination: string | null } {
-  const upper = filename.toUpperCase();
-  const match = upper.match(/([A-Z]{3,4})\s*[-_>\s]\s*([A-Z]{3,4})/);
-  if (match) {
-    const origin = resolveToICAO(match[1]);
-    const dest = resolveToICAO(match[2]);
-    if (origin && dest) return { origin, destination: dest };
-  }
-  return { origin: null, destination: null };
-}
-
-function stripHtml(html: string): string {
-  return html
-    .replace(/<br\s*\/?>/gi, "\n")
-    .replace(/<\/p>/gi, "\n")
-    .replace(/<\/tr>/gi, "\n")
-    .replace(/<\/td>/gi, " ")
-    .replace(/<\/li>/gi, "\n")
-    .replace(/<[^>]+>/g, "")
-    .replace(/&nbsp;/g, " ")
-    .replace(/&amp;/g, "&")
-    .replace(/&#?\w+;/g, "");
 }
 
 // --- Process a single email: AI (single call) → regex fallback ---
@@ -81,7 +47,7 @@ async function processEmailCached(email: RawEmail): Promise<ProcessedEmail> {
 }
 
 async function processEmail(email: RawEmail): Promise<ProcessedEmail> {
-  const bodyText = email.bodyType === "html" ? stripHtml(email.body) : email.body;
+  const bodyText = emailText(email);
   const filenames = email.attachments.map((a) => a.filename);
 
   // Extract PDF text if present
@@ -136,7 +102,7 @@ async function processEmail(email: RawEmail): Promise<ProcessedEmail> {
       let date = aiResult.date;
 
       if (!origin || !destination || !date) {
-        const regexInfo = regexTripFallback(email, pdfText);
+        const regexInfo = extractTrip(email, bodyText, pdfText);
         origin = origin ?? regexInfo.origin;
         destination = destination ?? regexInfo.destination;
         date = date ?? regexInfo.date;
@@ -146,86 +112,62 @@ async function processEmail(email: RawEmail): Promise<ProcessedEmail> {
     }
   }
 
-  // Full regex fallback (no AI)
-  const quote = pdfText ? parseQuoteFromPDF(email, pdfText) : parseQuoteFromText(email);
-  const tripInfo = regexTripFallback(email, pdfText);
-  return { quote, tripInfo };
-}
-
-function regexTripFallback(email: RawEmail, pdfText: string | null): ParsedSubject {
-  const fromSubject = parseSubject(email.subject);
-  let { origin, destination, date } = fromSubject;
-
-  if (!origin || !destination) {
-    for (const att of email.attachments) {
-      const fromFile = parseRouteFromFilename(att.filename);
-      if (fromFile.origin && fromFile.destination) {
-        origin = fromFile.origin;
-        destination = fromFile.destination;
-        break;
-      }
-    }
-  }
-
-  if (pdfText) {
-    const fromPdf = parseSubject(pdfText);
-    if (!origin || !destination) {
-      if (fromPdf.origin && fromPdf.destination) {
-        origin = fromPdf.origin;
-        destination = fromPdf.destination;
-      }
-    }
-    if (!date && fromPdf.date) date = fromPdf.date;
-  }
-
-  if (!origin || !destination || !date) {
-    const bodyText = email.bodyType === "html" ? email.body.replace(/<[^>]+>/g, " ") : email.body;
-    const fromBody = parseSubject(bodyText);
-    if (!origin || !destination) {
-      if (fromBody.origin && fromBody.destination) {
-        origin = fromBody.origin;
-        destination = fromBody.destination;
-      }
-    }
-    if (!date && fromBody.date) date = fromBody.date;
-  }
-
-  return { origin, destination, date };
+  // Rules based parsing (no AI, or the AI call failed)
+  const parsed = parseQuoteEmail(email, pdfText);
+  return { quote: parsed.quote, tripInfo: parsed.trip };
 }
 
 // --- In-memory cache to avoid re-parsing on every page load ---
 
+export interface ScanStats {
+  scanned: number; // emails read
+  quotes: number; // emails recognized as operator quotes
+}
+
 interface CachedResult {
-  key: string;
   trips: Trip[];
   unmatched: UnmatchedEmail[];
+  stats: ScanStats;
   timestamp: number;
 }
 
-let cache: CachedResult | null = null;
+// One entry per inbox: results are never shared between connected accounts
+const cache = new Map<string, CachedResult>();
 const CACHE_TTL_MS = 55_000; // 55 seconds — just under the 60s auto-refresh
 
 export async function buildTrips(): Promise<{
   trips: Trip[];
   unmatched: UnmatchedEmail[];
+  stats: ScanStats;
 }> {
   const { mode, anchorMs } = await getDataContext();
-  const cacheKey = mode === "demo" ? `demo:${anchorMs}` : "live";
-
-  // Return cached result immediately if cache is fresh — skip Outlook fetch entirely
-  if (cache && cache.key === cacheKey && (Date.now() - cache.timestamp) < CACHE_TTL_MS) {
-    const age = Math.round((Date.now() - cache.timestamp) / 1000);
-    console.log(`[buildTrips] Cache hit (age ${age}s)`);
-    return { trips: cache.trips, unmatched: cache.unmatched };
+  let cacheKey = `demo:${anchorMs}`;
+  if (mode === "live") {
+    const token = await getStoredRefreshToken().catch(() => null);
+    if (!token) return { trips: [], unmatched: [], stats: { scanned: 0, quotes: 0 } };
+    cacheKey = `live:${crypto.createHash("sha256").update(token).digest("hex").slice(0, 24)}`;
   }
 
-  const emails = mode === "demo" ? loadSeedEmails(anchorMs) : await fetchQuoteEmails();
+  // Return cached result immediately if cache is fresh — skip Outlook fetch entirely
+  const hit = cache.get(cacheKey);
+  if (hit && Date.now() - hit.timestamp < CACHE_TTL_MS) {
+    return { trips: hit.trips, unmatched: hit.unmatched, stats: hit.stats };
+  }
 
-  console.log(`[buildTrips] Processing ${emails.length} emails (AI: ${isAiEnabled() ? "ON" : "OFF"})`);
+  let scanned: number;
+  let validEmails: RawEmail[];
+  if (mode === "demo") {
+    validEmails = loadSeedEmails(anchorMs);
+    scanned = validEmails.length;
+  } else {
+    const account = await getStoredAccount().catch(() => null);
+    const scan = await fetchQuoteEmails(account?.email);
+    validEmails = scan.emails;
+    scanned = scan.scanned;
+  }
+
+  console.log(`[buildTrips] Processing ${validEmails.length} likely quotes of ${scanned} emails (AI: ${isAiEnabled() ? "ON" : "OFF"})`);
   const startTime = Date.now();
-
-  // Filter system emails first
-  const validEmails = emails.filter((e) => !isSystemEmail(e));
 
   // Process ALL emails in parallel
   const results = await Promise.all(validEmails.map((email) => processEmailCached(email)));
@@ -233,9 +175,13 @@ export async function buildTrips(): Promise<{
   const tripMap = new Map<string, { origin: string; destination: string; date: string; quotes: ParsedQuote[] }>();
   const unmatched: UnmatchedEmail[] = [];
 
+  let quoteCount = 0;
   for (let i = 0; i < validEmails.length; i++) {
     const email = validEmails[i];
     const { quote, tripInfo } = results[i];
+    // Skip emails that turned out not to be quotes (no price, PDF, portal link or specific aircraft)
+    if (!isQuote(quote)) continue;
+    quoteCount++;
     const key = buildTripKey(tripInfo);
 
     if (!key || !tripInfo.origin || !tripInfo.destination || !tripInfo.date) {
@@ -286,8 +232,9 @@ export async function buildTrips(): Promise<{
   const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
   console.log(`[buildTrips] Done in ${elapsed}s: ${trips.length} trips, ${unmatched.length} unmatched`);
 
-  // Cache the result
-  cache = { key: cacheKey, trips, unmatched, timestamp: Date.now() };
+  const stats = { scanned, quotes: quoteCount };
+  if (cache.size > 200) cache.clear();
+  cache.set(cacheKey, { trips, unmatched, stats, timestamp: Date.now() });
 
-  return { trips, unmatched };
+  return { trips, unmatched, stats };
 }

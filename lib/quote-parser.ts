@@ -61,12 +61,12 @@ function extractAircraft(text: string): string | null {
   return null;
 }
 
-function extractTailNumber(text: string): string | null {
+export function extractTailNumber(text: string): string | null {
   const match = text.match(/\bN\d{1,5}[A-Z]{0,2}\b/);
   return match ? match[0] : null;
 }
 
-function extractYOM(text: string): number | null {
+export function extractYOM(text: string): number | null {
   // Look for "YOM: XXXX" or "Year: XXXX" or "Year of Manufacture: XXXX"
   const yomMatch = text.match(/(?:YOM|Year(?:\s+of\s+(?:manufacture|mfg))?)[:\s]+(\d{4})/i);
   if (yomMatch) return parseInt(yomMatch[1]);
@@ -78,7 +78,7 @@ function extractYOM(text: string): number | null {
   return null;
 }
 
-function extractMaxPax(text: string): number | null {
+export function extractMaxPax(text: string): number | null {
   const match = text.match(/(?:max\s+)?(?:passengers?|pax|seats?)[:\s]+(\d{1,2})/i);
   if (match) return parseInt(match[1]);
 
@@ -88,7 +88,7 @@ function extractMaxPax(text: string): number | null {
   return null;
 }
 
-function extractRefurb(text: string): { interior: string | null; exterior: string | null } {
+export function extractRefurb(text: string): { interior: string | null; exterior: string | null } {
   // "Interior/Exterior refurb: 2022/2022" or "Refurb: 2022/2024" or "I/E: 2022/2022"
   const match = text.match(/(?:interior\s*\/\s*exterior|refurb(?:ished)?|I\s*\/\s*E)[:\s]+([\d-]+)\s*\/\s*([\d-]+)/i);
   if (match) {
@@ -100,7 +100,7 @@ function extractRefurb(text: string): { interior: string | null; exterior: strin
   return { interior: null, exterior: null };
 }
 
-function extractTotalHours(text: string): number | null {
+export function extractTotalHours(text: string): number | null {
   const match = text.match(/(?:total\s+(?:time|hours?|hrs)|flight\s+hours?|TTAF)[:\s]+([\d,]+)/i);
   if (match) return parseInt(match[1].replace(/,/g, ""));
 
@@ -110,7 +110,7 @@ function extractTotalHours(text: string): number | null {
   return null;
 }
 
-function extractOperator(text: string, fromName: string): string | null {
+export function extractOperator(text: string, fromName: string): string | null {
   // Try from email signature lines
   const lines = text.split("\n");
   for (let i = lines.length - 1; i >= Math.max(0, lines.length - 10); i--) {
@@ -131,7 +131,7 @@ function extractOperator(text: string, fromName: string): string | null {
   return fromName || null;
 }
 
-function extractExternalLink(text: string): string | null {
+export function extractExternalLink(text: string): string | null {
   const match = text.match(/https?:\/\/[^\s<>"]+(?:quote|portal|booking)[^\s<>"]*/i);
   return match ? match[0] : null;
 }
