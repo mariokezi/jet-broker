@@ -127,6 +127,15 @@ export function ConnectOutlook() {
               </div>
             </div>
           )}
+          {justConnected && status && !status.connected && !error && (
+            <div role="alert" className="mb-6 flex gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm">
+              <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
+              <div>
+                <div className="font-semibold text-amber-900">Microsoft signed you in, but this browser didn&apos;t keep the connection</div>
+                <div className="mt-0.5 text-amber-800">Allow cookies for this site (private windows and strict tracking settings can block them), then sign in again.</div>
+              </div>
+            </div>
+          )}
           {disconnected && !status?.connected && (
             <div className="mb-6 rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-600">Disconnected. The app is back on demo data.</div>
           )}
