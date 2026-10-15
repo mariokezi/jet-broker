@@ -105,6 +105,9 @@ export function resolveToICAO(input: string): string | null {
   const byIata = iataMap.get(upper);
   if (byIata) return byIata.icao;
 
+  // US airports are often written as the ICAO code without the K (SDL for KSDL)
+  if (/^[A-Z]{3}$/.test(upper) && icaoMap.has(`K${upper}`)) return `K${upper}`;
+
   // Check city/alias (case-insensitive)
   const byAlias = aliasMap.get(trimmed.toLowerCase());
   if (byAlias) return byAlias.icao;
