@@ -53,7 +53,7 @@ function SortHeader({
 }) {
   return (
     <th
-      className={`cursor-pointer select-none px-3 py-3 text-left text-xs font-medium text-white/40 uppercase tracking-wider hover:text-white/60 transition-colors whitespace-nowrap ${className ?? ""}`}
+      className={`cursor-pointer select-none px-3 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider hover:text-slate-600 transition-colors whitespace-nowrap ${className ?? ""}`}
       onClick={() => onSort(field)}
     >
       <div className="flex items-center gap-1">
@@ -178,15 +178,15 @@ export function QuoteDetailTable({ quotes, selected, onToggleSelect, decisions, 
       {/* Filter bar */}
       <div className="flex items-center gap-3 flex-wrap">
         {/* Date filter pills */}
-        <div className="flex items-center gap-1 rounded-lg border border-white/8 bg-white/[0.02] p-0.5">
+        <div className="flex items-center gap-1 rounded-lg border border-slate-200 bg-white p-0.5">
           {dateFilters.map((f) => (
             <button
               key={f.key}
               onClick={() => setDateFilter(f.key)}
               className={`rounded-md px-2.5 py-1.5 text-xs font-medium transition-all ${
                 dateFilter === f.key
-                  ? "bg-blue-600/20 text-blue-400 border border-blue-500/20"
-                  : "text-white/40 hover:text-white/60 border border-transparent"
+                  ? "bg-navy-50 text-navy-700 border border-navy-200"
+                  : "text-slate-500 hover:text-slate-600 border border-transparent"
               }`}
             >
               {f.label}
@@ -196,7 +196,7 @@ export function QuoteDetailTable({ quotes, selected, onToggleSelect, decisions, 
 
         {/* Search */}
         <div className="relative flex-1 max-w-xs">
-          <svg className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-white/25" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+          <svg className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
             <circle cx="7" cy="7" r="5" />
             <path d="M14 14l-3.5-3.5" />
           </svg>
@@ -204,15 +204,15 @@ export function QuoteDetailTable({ quotes, selected, onToggleSelect, decisions, 
             placeholder="Filter aircraft, operator, tail..."
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
-            className="w-full rounded-lg border border-white/8 bg-white/[0.03] pl-9 pr-4 py-2 text-sm text-white placeholder:text-white/20 outline-none focus:border-blue-500/40 focus:ring-1 focus:ring-blue-500/20 transition-all"
+            className="w-full rounded-lg border border-slate-200 bg-white pl-9 pr-4 py-2 text-sm text-slate-900 placeholder:text-slate-400 outline-none focus:border-navy-300 focus:ring-1 focus:ring-navy-200 transition-all"
           />
         </div>
 
         {/* Results count */}
-        <div className="flex items-center gap-2 text-xs text-white/30 ml-auto">
+        <div className="flex items-center gap-2 text-xs text-slate-400 ml-auto">
           <span>{filtered.length} quotes</span>
           {flaggedCount > 0 && (
-            <span className="flex items-center gap-1 text-amber-400/70">
+            <span className="flex items-center gap-1 text-amber-700">
               <svg className="h-3 w-3" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M8 1.5L14.5 13H1.5L8 1.5Z" />
                 <path d="M8 6v3" />
@@ -225,11 +225,11 @@ export function QuoteDetailTable({ quotes, selected, onToggleSelect, decisions, 
       </div>
 
       {/* Table */}
-      <div className="rounded-xl border border-white/5 overflow-hidden">
+      <div className="rounded-xl border border-slate-200 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead>
-              <tr className="border-b border-white/5 bg-white/[0.02]">
+              <tr className="border-b border-slate-200 bg-white">
                 {onToggleSelect && <th className="w-8 px-3 py-3" aria-label="Select for proposal" />}
                 <SortHeader {...sortProps} field="status">Status</SortHeader>
                 <SortHeader {...sortProps} field="price">Price</SortHeader>
@@ -254,16 +254,16 @@ export function QuoteDetailTable({ quotes, selected, onToggleSelect, decisions, 
                 return (
                   <tr
                     key={quote.emailId}
-                    className={`border-b border-white/[0.03] cursor-pointer group transition-colors ${
+                    className={`border-b border-slate-200 cursor-pointer group transition-colors ${
                       newIds?.has(quote.emailId) ? "animate-in fade-in slide-in-from-top-1 duration-500 " : ""
                     }${
                       decision === "Declined"
                         ? "opacity-40 hover:opacity-70"
                         : isSelected
-                          ? "bg-blue-500/[0.07] hover:bg-blue-500/[0.1]"
+                          ? "bg-navy-50 hover:bg-navy-50"
                           : flagged
-                            ? "hover:bg-amber-500/[0.04] bg-amber-500/[0.02]"
-                            : "hover:bg-white/[0.03]"
+                            ? "hover:bg-amber-50 bg-amber-50"
+                            : "hover:bg-slate-50"
                     }`}
                     onClick={() => handleRowClick(quote)}
                   >
@@ -284,11 +284,11 @@ export function QuoteDetailTable({ quotes, selected, onToggleSelect, decisions, 
                         <StatusBadge status={decision ?? quote.status} />
                       </div>
                     </td>
-                    <td className="px-3 py-3 font-semibold text-sm text-white">
+                    <td className="px-3 py-3 font-semibold text-sm text-slate-900">
                       {quote.quoteSource === "external" ? (
                         <div className="flex items-center gap-1.5">
                           {flagged && (
-                            <svg className="h-3.5 w-3.5 text-amber-400 shrink-0" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                            <svg className="h-3.5 w-3.5 text-amber-700 shrink-0" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                               <path d="M8 1.5L14.5 13H1.5L8 1.5Z" />
                               <path d="M8 6v3" />
                               <circle cx="8" cy="11" r="0.5" fill="currentColor" />
@@ -298,7 +298,7 @@ export function QuoteDetailTable({ quotes, selected, onToggleSelect, decisions, 
                             href={quote.externalLink ?? "#"}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="text-blue-400 hover:text-blue-300 flex items-center gap-1"
+                            className="text-navy-700 hover:text-navy-700 flex items-center gap-1"
                             onClick={(e) => e.stopPropagation()}
                           >
                             <svg className="h-3.5 w-3.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
@@ -312,57 +312,57 @@ export function QuoteDetailTable({ quotes, selected, onToggleSelect, decisions, 
                       ) : quote.priceFormatted ? (
                         quote.priceFormatted
                       ) : (
-                        <span className="text-white/20">&mdash;</span>
+                        <span className="text-slate-400">&mdash;</span>
                       )}
                     </td>
                     {valueScores && (
                       <td className="px-3 py-3">
                         {score !== undefined ? (
                           <div className="flex items-center gap-2">
-                            <div className="h-1.5 w-12 rounded-full bg-white/[0.06] overflow-hidden" aria-hidden>
-                              <div className="h-full rounded-full bg-blue-400/80" style={{ width: `${score}%` }} />
+                            <div className="h-1.5 w-12 rounded-full bg-slate-50 overflow-hidden" aria-hidden>
+                              <div className="h-full rounded-full bg-navy-100" style={{ width: `${score}%` }} />
                             </div>
-                            <span className="text-xs tabular-nums text-white/55">{score}</span>
+                            <span className="text-xs tabular-nums text-slate-600">{score}</span>
                             {quote.emailId === bestValueId && (
-                              <span className="rounded bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-medium text-emerald-300 whitespace-nowrap">Best value</span>
+                              <span className="rounded bg-emerald-50 px-1.5 py-0.5 text-[10px] font-medium text-emerald-700 whitespace-nowrap">Best value</span>
                             )}
                           </div>
                         ) : (
-                          <span className="text-white/20">&mdash;</span>
+                          <span className="text-slate-400">&mdash;</span>
                         )}
                       </td>
                     )}
                     <td className="px-3 py-3">
-                      <span className="text-blue-400 text-sm font-medium whitespace-nowrap">
-                        {quote.aircraft ?? <span className="text-white/20">&mdash;</span>}
+                      <span className="text-navy-700 text-sm font-medium whitespace-nowrap">
+                        {quote.aircraft ?? <span className="text-slate-400">&mdash;</span>}
                       </span>
                     </td>
-                    <td className="px-3 py-3 text-sm text-white/60">
-                      {quote.maxPax ?? <span className="text-white/20">&mdash;</span>}
+                    <td className="px-3 py-3 text-sm text-slate-600">
+                      {quote.maxPax ?? <span className="text-slate-400">&mdash;</span>}
                     </td>
-                    <td className="px-3 py-3 text-sm text-white/60">
-                      {quote.yom ?? <span className="text-white/20">&mdash;</span>}
+                    <td className="px-3 py-3 text-sm text-slate-600">
+                      {quote.yom ?? <span className="text-slate-400">&mdash;</span>}
                     </td>
-                    <td className="px-3 py-3 text-sm text-white/60">
+                    <td className="px-3 py-3 text-sm text-slate-600">
                       {quote.refurbInterior || quote.refurbExterior ? (
                         `${quote.refurbInterior ?? "\u2014"}/${quote.refurbExterior ?? "\u2014"}`
                       ) : (
-                        <span className="text-white/20">&mdash;</span>
+                        <span className="text-slate-400">&mdash;</span>
                       )}
                     </td>
-                    <td className="px-3 py-3 text-sm text-white/60">
+                    <td className="px-3 py-3 text-sm text-slate-600">
                       {quote.totalHours ? (
                         `${quote.totalHours.toLocaleString()}`
                       ) : (
-                        <span className="text-white/20">&mdash;</span>
+                        <span className="text-slate-400">&mdash;</span>
                       )}
                     </td>
                     <td className="px-3 py-3">
-                      <span className="text-sm text-white/60">
-                        {quote.operator ?? <span className="text-white/20">&mdash;</span>}
+                      <span className="text-sm text-slate-600">
+                        {quote.operator ?? <span className="text-slate-400">&mdash;</span>}
                       </span>
                     </td>
-                    <td className="px-3 py-3 text-white/40 text-sm tabular-nums">
+                    <td className="px-3 py-3 text-slate-500 text-sm tabular-nums">
                       {format(parseISO(quote.receivedAt), "MM/dd HH:mm")}
                     </td>
                     <td className="px-3 py-3">
@@ -371,7 +371,7 @@ export function QuoteDetailTable({ quotes, selected, onToggleSelect, decisions, 
                           href={faaUrl(quote.tailNumber)}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="text-white/30 hover:text-blue-400 transition-colors"
+                          className="text-slate-400 hover:text-navy-700 transition-colors"
                           onClick={(e) => e.stopPropagation()}
                           title={`FAA: ${quote.tailNumber}`}
                         >
@@ -382,17 +382,17 @@ export function QuoteDetailTable({ quotes, selected, onToggleSelect, decisions, 
                           </svg>
                         </a>
                       ) : (
-                        <span className="text-white/20">&mdash;</span>
+                        <span className="text-slate-400">&mdash;</span>
                       )}
                     </td>
                     {onBook && (
                       <td className="px-3 py-3 text-right" onClick={(e) => e.stopPropagation()}>
                         {decision === "Accepted" ? (
-                          <span className="text-xs text-emerald-400">Booked</span>
+                          <span className="text-xs text-emerald-700">Booked</span>
                         ) : quote.price !== null ? (
                           <button
                             onClick={() => onBook(quote)}
-                            className="rounded-md border border-white/10 px-2 py-1 text-[11px] font-medium text-white/60 hover:border-emerald-500/40 hover:text-emerald-300 transition-colors"
+                            className="rounded-md border border-slate-200 px-2 py-1 text-[11px] font-medium text-slate-600 hover:border-emerald-300 hover:text-emerald-700 transition-colors"
                           >
                             Book
                           </button>
@@ -404,7 +404,7 @@ export function QuoteDetailTable({ quotes, selected, onToggleSelect, decisions, 
               })}
               {sorted.length === 0 && (
                 <tr>
-                  <td colSpan={13} className="text-center text-white/30 py-12">
+                  <td colSpan={13} className="text-center text-slate-400 py-12">
                     No quotes match your filter.
                   </td>
                 </tr>

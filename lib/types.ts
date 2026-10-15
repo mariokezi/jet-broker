@@ -194,6 +194,8 @@ export interface Booking {
   operatorPrice: number;
   clientPrice: number;
   checklist: BookingChecklistItem[];
+  /** Flight tracking: when departure and landing alerts went out, and whether the client gets texts. */
+  tracking?: { departedAt: string | null; landedAt: string | null; notifyClient: boolean };
 }
 
 export interface ActivityItem {

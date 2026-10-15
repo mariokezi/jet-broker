@@ -20,7 +20,7 @@ function Form({ initial }: { initial: BrokerSettings }) {
 
   const field = (key: keyof BrokerSettings, label: string, type = "text") => (
     <label className="block">
-      <span className="text-xs text-white/45">{label}</span>
+      <span className="text-xs text-slate-500">{label}</span>
       <input
         type={type}
         className={`${inputCls} mt-1`}
@@ -55,7 +55,7 @@ function Form({ initial }: { initial: BrokerSettings }) {
         </Panel>
 
         <Panel title="Demo data">
-          <p className="text-sm text-white/55 mb-4">
+          <p className="text-sm text-slate-600 mb-4">
             Resets inquiries, quotes, proposals, and bookings to a fresh demo dataset dated from today. Use this before a walkthrough.
           </p>
           {confirmReset ? (
@@ -68,9 +68,9 @@ function Form({ initial }: { initial: BrokerSettings }) {
               <RotateCcw className="h-4 w-4" /> Reset demo data
             </button>
           )}
-          <div className="mt-6 pt-4 border-t border-white/5 text-xs text-white/40 space-y-1.5">
-            <p><span className="text-white/60">AI:</span> set <code className="text-white/60">ANTHROPIC_API_KEY</code> to have Claude parse quotes, qualify inquiries, and draft emails. Without it, the built-in rules engine and templates run instead.</p>
-            <p><span className="text-white/60">Live inbox:</span> connect Outlook (read-only Mail.Read) and switch the header toggle to Live inbox.</p>
+          <div className="mt-6 pt-4 border-t border-slate-200 text-xs text-slate-500 space-y-1.5">
+            <p><span className="text-slate-600">AI:</span> set <code className="text-slate-600">ANTHROPIC_API_KEY</code> to have Claude parse quotes, qualify inquiries, and draft emails. Without it, the built-in rules engine and templates run instead.</p>
+            <p><span className="text-slate-600">Live inbox:</span> connect Outlook (read-only Mail.Read) and switch the header toggle to Live inbox.</p>
           </div>
         </Panel>
       </div>

@@ -41,11 +41,11 @@ export function AutoRefresh({ intervalMs = 60_000 }: { intervalMs?: number }) {
 
   return (
     <div className="flex items-center gap-3 mb-4">
-      <div className="flex items-center gap-2 text-xs text-white/35">
+      <div className="flex items-center gap-2 text-xs text-slate-500">
         {/* Pulse dot */}
         <span className="relative flex h-2 w-2">
-          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400/40" />
-          <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-400/80" />
+          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-100" />
+          <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-100" />
         </span>
         <span>Updated {formatElapsed(elapsed)}</span>
       </div>
@@ -53,7 +53,7 @@ export function AutoRefresh({ intervalMs = 60_000 }: { intervalMs?: number }) {
       <button
         onClick={doRefresh}
         disabled={refreshing}
-        className="flex items-center gap-1.5 rounded-lg border border-white/8 bg-white/[0.03] px-2.5 py-1 text-xs text-white/40 hover:text-white/70 hover:bg-white/[0.06] transition-all disabled:opacity-40"
+        className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs text-slate-500 hover:text-slate-700 hover:bg-slate-100 transition-all disabled:opacity-40"
         title="Refresh now"
       >
         <svg
@@ -72,7 +72,7 @@ export function AutoRefresh({ intervalMs = 60_000 }: { intervalMs?: number }) {
       </button>
 
       {/* Next auto-refresh countdown */}
-      <div className="text-[10px] text-white/20 tabular-nums">
+      <div className="text-[10px] text-slate-400 tabular-nums">
         next in {Math.max(0, Math.floor((intervalMs / 1000) - elapsed))}s
       </div>
     </div>

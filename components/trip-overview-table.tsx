@@ -87,15 +87,15 @@ export function TripOverviewTable({ trips, unmatched }: TripOverviewTableProps) 
     <div className="space-y-4">
       {/* Filter bar */}
       <div className="flex items-center justify-between gap-4 flex-wrap">
-        <div className="flex items-center gap-1 rounded-lg border border-white/8 bg-white/[0.02] p-0.5">
+        <div className="flex items-center gap-1 rounded-lg border border-slate-200 bg-white p-0.5">
           {filters.map((f) => (
             <button
               key={f.key}
               onClick={() => setDateFilter(f.key)}
               className={`rounded-md px-3 py-1.5 text-xs font-medium transition-all ${
                 dateFilter === f.key
-                  ? "bg-blue-600/20 text-blue-400 border border-blue-500/20"
-                  : "text-white/40 hover:text-white/60 border border-transparent"
+                  ? "bg-navy-50 text-navy-700 border border-navy-200"
+                  : "text-slate-500 hover:text-slate-600 border border-transparent"
               }`}
             >
               {f.label}
@@ -105,15 +105,15 @@ export function TripOverviewTable({ trips, unmatched }: TripOverviewTableProps) 
 
         {/* Sort controls */}
         <div className="flex items-center gap-2">
-          <span className="text-[10px] text-white/25 uppercase tracking-wider">Sort</span>
+          <span className="text-[10px] text-slate-400 uppercase tracking-wider">Sort</span>
           {(["date", "route", "quotes", "priceRange", "updated"] as SortField[]).map((field) => (
             <button
               key={field}
               onClick={() => toggleSort(field)}
               className={`flex items-center gap-1 rounded-md px-2 py-1 text-[11px] transition-all ${
                 sortField === field
-                  ? "text-white/70 bg-white/[0.05]"
-                  : "text-white/30 hover:text-white/50"
+                  ? "text-slate-700 bg-slate-50"
+                  : "text-slate-400 hover:text-slate-600"
               }`}
             >
               {field === "priceRange" ? "Price" : field === "updated" ? "Updated" : field.charAt(0).toUpperCase() + field.slice(1)}
@@ -132,14 +132,14 @@ export function TripOverviewTable({ trips, unmatched }: TripOverviewTableProps) 
       </div>
 
       {/* Results summary */}
-      <div className="flex items-center gap-3 text-xs text-white/30">
+      <div className="flex items-center gap-3 text-xs text-slate-400">
         <span>{filtered.length} trips</span>
-        <span className="text-white/10">|</span>
+        <span className="text-slate-300">|</span>
         <span>{filtered.reduce((s, t) => s + t.quotes.length, 0)} quotes</span>
         {flaggedCount > 0 && (
           <>
-            <span className="text-white/10">|</span>
-            <span className="flex items-center gap-1 text-amber-400/70">
+            <span className="text-slate-300">|</span>
+            <span className="flex items-center gap-1 text-amber-700">
               <svg className="h-3 w-3" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M8 1.5L14.5 13H1.5L8 1.5Z" />
                 <path d="M8 6v3" />
@@ -159,10 +159,10 @@ export function TripOverviewTable({ trips, unmatched }: TripOverviewTableProps) 
             <Link
               key={trip.tripId}
               href={`/trip/${trip.tripId}`}
-              className={`group rounded-xl border bg-white/[0.02] hover:bg-white/[0.05] transition-all p-4 ${
+              className={`group rounded-xl border bg-white hover:bg-slate-50 transition-all p-4 ${
                 hasFlags
-                  ? "border-amber-500/20 hover:border-amber-500/30"
-                  : "border-white/5 hover:border-white/10"
+                  ? "border-amber-200 hover:border-amber-200"
+                  : "border-slate-200 hover:border-slate-200"
               }`}
             >
               <div className="flex items-center justify-between">
@@ -170,17 +170,17 @@ export function TripOverviewTable({ trips, unmatched }: TripOverviewTableProps) 
                   {/* Plane icon */}
                   <div className={`flex items-center justify-center w-9 h-9 rounded-lg border ${
                     hasFlags
-                      ? "bg-amber-600/10 border-amber-500/15"
-                      : "bg-blue-600/10 border-blue-500/10"
+                      ? "bg-amber-50 border-amber-200"
+                      : "bg-navy-50 border-navy-200"
                   }`}>
                     {hasFlags ? (
-                      <svg className="h-4 w-4 text-amber-400" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                      <svg className="h-4 w-4 text-amber-700" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                         <path d="M8 1.5L14.5 13H1.5L8 1.5Z" />
                         <path d="M8 6v3" />
                         <circle cx="8" cy="11" r="0.5" fill="currentColor" />
                       </svg>
                     ) : (
-                      <svg className="h-4 w-4 text-blue-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                      <svg className="h-4 w-4 text-navy-700" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                         <path d="M17.8 19.2L16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2Z" />
                       </svg>
                     )}
@@ -188,23 +188,23 @@ export function TripOverviewTable({ trips, unmatched }: TripOverviewTableProps) 
 
                   <div>
                     <div className="flex items-center gap-2">
-                      <span className="font-semibold text-white text-sm">
+                      <span className="font-semibold text-slate-900 text-sm">
                         {trip.origin}
                       </span>
-                      <svg className="h-3 w-3 text-white/25" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+                      <svg className="h-3 w-3 text-slate-400" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
                         <path d="M2 6h8M7 3l3 3-3 3" />
                       </svg>
-                      <span className="font-semibold text-white text-sm">
+                      <span className="font-semibold text-slate-900 text-sm">
                         {trip.destination}
                       </span>
-                      <span className="text-xs text-white/25">
+                      <span className="text-xs text-slate-400">
                         {getIATACode(trip.origin)}/{getIATACode(trip.destination)}
                       </span>
-                      <span className="text-[10px] font-mono text-white/15 bg-white/[0.04] rounded px-1.5 py-0.5">
+                      <span className="text-[10px] font-mono text-slate-300 bg-slate-50 rounded px-1.5 py-0.5">
                         {trip.tripId}
                       </span>
                     </div>
-                    <div className="text-xs text-white/35 mt-0.5">
+                    <div className="text-xs text-slate-500 mt-0.5">
                       {trip.originName} to {trip.destinationName}
                     </div>
                   </div>
@@ -212,17 +212,17 @@ export function TripOverviewTable({ trips, unmatched }: TripOverviewTableProps) 
 
                 <div className="flex items-center gap-5">
                   <div className="text-right">
-                    <div className="text-sm font-semibold text-white">
+                    <div className="text-sm font-semibold text-slate-900">
                       {formatPriceRange(trip.quotes)}
                     </div>
-                    <div className="text-xs text-white/35 mt-0.5">
+                    <div className="text-xs text-slate-500 mt-0.5">
                       {trip.quotes.length} quote{trip.quotes.length !== 1 ? "s" : ""}
                     </div>
                   </div>
 
                   <div className="text-right hidden sm:block">
-                    <div className="text-sm text-white/50">{trip.date}</div>
-                    <div className="text-xs text-white/25 mt-0.5">
+                    <div className="text-sm text-slate-600">{trip.date}</div>
+                    <div className="text-xs text-slate-400 mt-0.5">
                       {formatDistanceToNow(parseISO(trip.lastUpdated), { addSuffix: true })}
                     </div>
                   </div>
@@ -230,14 +230,14 @@ export function TripOverviewTable({ trips, unmatched }: TripOverviewTableProps) 
                   <div className="flex items-center gap-2">
                     <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${
                       hasFlags
-                        ? "bg-amber-500/10 border border-amber-500/20 text-amber-400"
+                        ? "bg-amber-50 border border-amber-200 text-amber-700"
                         : trip.status === "Closed"
-                          ? "bg-blue-500/10 border border-blue-500/20 text-blue-300"
-                          : "bg-emerald-500/10 border border-emerald-500/20 text-emerald-400"
+                          ? "bg-navy-50 border border-navy-200 text-navy-700"
+                          : "bg-emerald-50 border border-emerald-200 text-emerald-700"
                     }`}>
                       {hasFlags ? "Review" : trip.status === "Closed" ? "Booked" : trip.status}
                     </span>
-                    <svg className="h-4 w-4 text-white/15 group-hover:text-white/40 transition-colors" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                    <svg className="h-4 w-4 text-slate-300 group-hover:text-slate-500 transition-colors" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                       <path d="M6 4l4 4-4 4" />
                     </svg>
                   </div>
@@ -248,42 +248,42 @@ export function TripOverviewTable({ trips, unmatched }: TripOverviewTableProps) 
         })}
 
         {sorted.length === 0 && (
-          <div className="rounded-xl border border-white/5 bg-white/[0.02] p-12 text-center">
-            <svg className="h-8 w-8 text-white/15 mx-auto mb-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+          <div className="rounded-xl border border-slate-200 bg-white p-12 text-center">
+            <svg className="h-8 w-8 text-slate-300 mx-auto mb-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
               <path d="M22 12h-6l-2 3h-4l-2-3H2" />
               <path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11Z" />
             </svg>
-            <p className="text-sm text-white/30">No trips match this filter.</p>
+            <p className="text-sm text-slate-400">No trips match this filter.</p>
           </div>
         )}
       </div>
 
       {/* Unmatched emails — collapsible "Needs Review" section */}
       {unmatched.length > 0 && (
-        <div className="rounded-xl border border-red-500/15 bg-red-500/[0.03]">
+        <div className="rounded-xl border border-red-200 bg-red-50">
           <button
             onClick={() => setUnmatchedOpen(!unmatchedOpen)}
             className="w-full flex items-center justify-between p-4 text-left"
           >
             <div className="flex items-center gap-2.5">
-              <div className="flex items-center justify-center w-7 h-7 rounded-lg bg-red-500/10 border border-red-500/15">
-                <svg className="h-3.5 w-3.5 text-red-400" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <div className="flex items-center justify-center w-7 h-7 rounded-lg bg-red-50 border border-red-200">
+                <svg className="h-3.5 w-3.5 text-red-700" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                   <circle cx="8" cy="8" r="6.5" />
                   <path d="M8 5v3.5" />
                   <circle cx="8" cy="11" r="0.5" fill="currentColor" />
                 </svg>
               </div>
               <div>
-                <span className="text-sm font-medium text-red-300">
+                <span className="text-sm font-medium text-red-700">
                   {unmatched.length} Untracked Email{unmatched.length !== 1 ? "s" : ""}
                 </span>
-                <span className="text-xs text-red-300/40 ml-2">
+                <span className="text-xs text-red-700 ml-2">
                   Could not parse route or date
                 </span>
               </div>
             </div>
             <svg
-              className={`h-4 w-4 text-red-400/50 transition-transform ${unmatchedOpen ? "rotate-180" : ""}`}
+              className={`h-4 w-4 text-red-700 transition-transform ${unmatchedOpen ? "rotate-180" : ""}`}
               viewBox="0 0 16 16"
               fill="none"
               stroke="currentColor"
@@ -300,23 +300,23 @@ export function TripOverviewTable({ trips, unmatched }: TripOverviewTableProps) 
               {unmatched.map((u) => (
                 <div
                   key={u.email.id}
-                  className="flex items-center justify-between rounded-lg bg-white/[0.02] border border-white/5 px-3 py-2.5"
+                  className="flex items-center justify-between rounded-lg bg-white border border-slate-200 px-3 py-2.5"
                 >
                   <div className="flex items-center gap-2.5 min-w-0">
-                    <svg className="h-3.5 w-3.5 text-red-400/50 shrink-0" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                    <svg className="h-3.5 w-3.5 text-red-700 shrink-0" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                       <rect x="1.5" y="3" width="13" height="10" rx="1.5" />
                       <path d="M1.5 5.5L8 9.5l6.5-4" />
                     </svg>
                     <div className="min-w-0">
-                      <span className="text-sm font-medium text-white/70 truncate block">
+                      <span className="text-sm font-medium text-slate-700 truncate block">
                         {u.email.subject}
                       </span>
-                      <span className="text-[11px] text-white/30">
+                      <span className="text-[11px] text-slate-400">
                         from {u.email.fromName} &middot; {formatDistanceToNow(parseISO(u.email.receivedAt), { addSuffix: true })}
                       </span>
                     </div>
                   </div>
-                  <span className="text-[11px] text-red-300/50 bg-red-500/10 rounded px-2 py-0.5 shrink-0 ml-3">
+                  <span className="text-[11px] text-red-700 bg-red-50 rounded px-2 py-0.5 shrink-0 ml-3">
                     {u.reason}
                   </span>
                 </div>

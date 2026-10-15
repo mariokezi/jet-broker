@@ -142,7 +142,7 @@ export function InquiryIntake() {
                   setSource(s.source);
                   setFields(null);
                 }}
-                className="rounded-full border border-white/10 bg-white/[0.03] px-2.5 py-1 text-[11px] text-white/55 hover:text-white hover:border-white/20 transition-colors"
+                className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11px] text-slate-600 hover:text-slate-900 hover:border-slate-300 transition-colors"
               >
                 {s.label}
               </button>
@@ -158,7 +158,7 @@ export function InquiryIntake() {
           <div className="flex items-center justify-between gap-3 mt-3 flex-wrap">
             <select value={source} onChange={(e) => setSource(e.target.value as InquirySource)} className={`${inputCls} w-auto`}>
               {(["Email", "Web Form", "Phone", "Referral"] as InquirySource[]).map((s) => (
-                <option key={s} value={s} className="bg-slate-900">{s}</option>
+                <option key={s} value={s} className="bg-white">{s}</option>
               ))}
             </select>
             <button onClick={analyze} disabled={loading || !text.trim()} className={btnPrimary}>
@@ -166,7 +166,7 @@ export function InquiryIntake() {
               {loading ? "Analyzing..." : "Qualify and estimate"}
             </button>
           </div>
-          {error && <p className="text-xs text-red-400 mt-2">{error}</p>}
+          {error && <p className="text-xs text-red-700 mt-2">{error}</p>}
         </Panel>
 
         {fields && (
@@ -188,15 +188,15 @@ export function InquiryIntake() {
               <Field label="Departure time"><input className={inputCls} value={fields.departureTime ?? ""} onChange={(e) => set("departureTime", e.target.value || null)} /></Field>
               <Field label="Aircraft category">
                 <select className={inputCls} value={fields.category ?? ""} onChange={(e) => set("category", (e.target.value || null) as InquiryFields["category"])}>
-                  <option value="" className="bg-slate-900">Any</option>
-                  {categoryList().map((c) => <option key={c} value={c} className="bg-slate-900">{c}</option>)}
+                  <option value="" className="bg-white">Any</option>
+                  {categoryList().map((c) => <option key={c} value={c} className="bg-white">{c}</option>)}
                 </select>
               </Field>
               <Field label="Budget (USD)"><input type="number" className={inputCls} value={fields.budget ?? ""} onChange={(e) => set("budget", e.target.value ? Number(e.target.value) : null)} /></Field>
             </div>
             {(fields.notes || fields.pets) && (
-              <p className="text-xs text-white/45 mt-3">
-                {fields.pets && <span className="mr-2 rounded bg-white/5 px-1.5 py-0.5">Pet on board</span>}
+              <p className="text-xs text-slate-500 mt-3">
+                {fields.pets && <span className="mr-2 rounded bg-slate-50 px-1.5 py-0.5">Pet on board</span>}
                 {fields.notes}
               </p>
             )}
@@ -206,8 +206,8 @@ export function InquiryIntake() {
 
       <div className="space-y-4">
         {!analysis ? (
-          <div className="rounded-xl border border-dashed border-white/10 p-10 text-center text-sm text-white/35 h-full flex flex-col items-center justify-center min-h-[320px]">
-            <Sparkles className="h-6 w-6 text-blue-300/60 mb-3" />
+          <div className="rounded-xl border border-dashed border-slate-200 p-10 text-center text-sm text-slate-500 h-full flex flex-col items-center justify-center min-h-[320px]">
+            <Sparkles className="h-6 w-6 text-navy-700 mb-3" />
             Paste any request and the assistant extracts the trip, scores the lead,
             <br className="hidden sm:block" /> and prices it against the market in seconds.
           </div>
@@ -218,7 +218,7 @@ export function InquiryIntake() {
                 <ScoreRing score={analysis.qualification.score} tier={analysis.qualification.tier} />
                 <div className="min-w-0">
                   <TierBadge tier={analysis.qualification.tier} score={analysis.qualification.score} />
-                  <p className="text-sm text-white/75 mt-2">{analysis.qualification.summary}</p>
+                  <p className="text-sm text-slate-700 mt-2">{analysis.qualification.summary}</p>
                 </div>
               </div>
               <ReasonsList reasons={analysis.qualification.reasons} missing={analysis.qualification.missing} />
@@ -249,7 +249,7 @@ function tripIdFor(inq: Inquiry): string {
 
 export function AiBadge({ aiUsed, ms }: { aiUsed: boolean; ms: number }) {
   return (
-    <span className="inline-flex items-center gap-1 text-[10px] text-white/35">
+    <span className="inline-flex items-center gap-1 text-[10px] text-slate-500">
       <Cpu className="h-3 w-3" />
       {aiUsed ? "Claude" : "Rules engine"} &middot; {(ms / 1000).toFixed(1)}s
     </span>
@@ -259,7 +259,7 @@ export function AiBadge({ aiUsed, ms }: { aiUsed: boolean; ms: number }) {
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <label className="block">
-      <span className="text-[11px] text-white/40">{label}</span>
+      <span className="text-[11px] text-slate-500">{label}</span>
       <div className="mt-1">{children}</div>
     </label>
   );
@@ -268,10 +268,10 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 function AirportSelect({ value, onChange }: { value: string | null; onChange: (v: string | null) => void }) {
   return (
     <select className={inputCls} value={value ?? ""} onChange={(e) => onChange(e.target.value || null)}>
-      <option value="" className="bg-slate-900">Unknown</option>
-      {value && !AIRPORTS.some((a) => a.icao === value) && <option value={value} className="bg-slate-900">{value}</option>}
+      <option value="" className="bg-white">Unknown</option>
+      {value && !AIRPORTS.some((a) => a.icao === value) && <option value={value} className="bg-white">{value}</option>}
       {AIRPORTS.map((a) => (
-        <option key={a.icao} value={a.icao} className="bg-slate-900">
+        <option key={a.icao} value={a.icao} className="bg-white">
           {a.icao} &middot; {a.city} ({a.name})
         </option>
       ))}

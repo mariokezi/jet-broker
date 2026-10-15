@@ -30,17 +30,18 @@ Open [http://localhost:3000](http://localhost:3000). No environment variables ar
 3. Use default settings — no environment variables needed for the demo.
 4. Deploy.
 
-## Connecting to Office 365 (Phase 2)
+## Connecting Outlook
 
-To connect a real Office 365 inbox and pull quote emails via Microsoft Graph:
+Open **/connect** (sidebar: Connect Outlook). Anyone signs in with Microsoft there and picks any Outlook.com, Hotmail, Live or Microsoft 365 account. Access is read only (`Mail.Read`, `User.Read`), the sign-in is stored encrypted in that browser's cookies, and the page shows the connected account, inbox totals, Switch account and Disconnect. Until the settings below exist, the page shows the setup steps and the exact redirect URI to register.
 
-1. Register an app at portal.azure.com → App registrations.
-2. Add API permission: **Microsoft Graph → Delegated → Mail.Read** (READ-ONLY — do not request Mail.ReadWrite).
-3. Grant admin consent.
-4. Set redirect URI to your Vercel URL.
-5. Store `CLIENT_ID`, `TENANT_ID`, `CLIENT_SECRET` as Vercel env vars.
+One-time setup:
+1. Azure portal, App registrations, New registration. Supported account types: **Accounts in any organizational directory and personal Microsoft accounts**.
+2. Redirect URI (Web): `https://<your-domain>/api/auth/callback`. Add one per address you sign in from (production and any preview link).
+3. API permissions, Microsoft Graph, Delegated: `Mail.Read`, `User.Read`, `offline_access`, `openid`, `profile`, `email`.
+4. Certificates & secrets: new client secret, copy its Value.
+5. Vercel environment variables, then redeploy: `CLIENT_ID` (Application ID), `CLIENT_SECRET` (secret Value), `COOKIE_SECRET` (64 hex characters, e.g. `openssl rand -hex 32`). `TENANT_ID` and `NEXT_PUBLIC_APP_URL` are optional; the sign-in uses the `common` endpoint and the address of the current request.
 
-Then implement the live Graph API calls in `lib/o365-client.ts` — the rest of the app is already wired to use `fetchQuoteEmails()` as its only data source.
+Company accounts may need their Microsoft 365 admin to approve the app once.
 
 ## Adding New Airports
 
