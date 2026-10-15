@@ -33,6 +33,7 @@ function explain(error: string, detail: string | null, redirectUri: string): { t
   if (error === "not_configured") return { title: "Outlook isn't set up yet", body: "The Microsoft app settings are missing. Follow the setup steps below, then try again." };
   if (error === "state_mismatch") return { title: "The sign-in expired", body: "That sign-in took too long or was opened in another tab. Please try again." };
   if (/AADSTS50011/.test(d)) return { title: "This address isn't registered with Microsoft", body: `Add ${redirectUri} as a Web redirect URI in your Azure app registration, then try again.` };
+  if (/AADSTS700025|AADSTS7000218/.test(d)) return { title: "The redirect link is set up as a mobile app", body: `In Azure, open Authentication, remove ${redirectUri} from "Mobile and desktop applications", add it under a Web platform instead, set "Allow public client flows" to No, and save.` };
   if (/AADSTS7000215|AADSTS7000222|invalid_client/.test(d)) return { title: "The client secret is wrong or expired", body: "Create a new client secret in Azure and paste its Value into CLIENT_SECRET in Vercel, then redeploy." };
   if (/AADSTS90094|AADSTS65001|admin/i.test(d)) return { title: "This account needs admin approval", body: "The company's Microsoft 365 admin has to approve JetBroker once. Send them the app name and ask them to grant consent, or connect a personal Outlook account." };
   if (/AADSTS50020|AADSTS700016/.test(d)) return { title: "This type of account isn't allowed", body: "In Azure, set the app's supported account types to \"Accounts in any organizational directory and personal Microsoft accounts\"." };
@@ -123,6 +124,15 @@ export function ConnectOutlook() {
               <div className="text-sm">
                 <div className="font-semibold text-rose-800">{problem.title}</div>
                 <div className="mt-0.5 break-words text-rose-700">{problem.body}</div>
+              </div>
+            </div>
+          )}
+          {justConnected && status && !status.connected && !error && (
+            <div role="alert" className="mb-6 flex gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm">
+              <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
+              <div>
+                <div className="font-semibold text-amber-900">Microsoft signed you in, but this browser didn&apos;t keep the connection</div>
+                <div className="mt-0.5 text-amber-800">Allow cookies for this site (private windows and strict tracking settings can block them), then sign in again.</div>
               </div>
             </div>
           )}

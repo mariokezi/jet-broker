@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { buildAccountCookie, buildTokenCookie, exchangeCodeForTokens, fetchAccount, getRedirectUri, requestOrigin } from "@/lib/auth";
+import { buildAccountCookie, buildTokenCookies, exchangeCodeForTokens, fetchAccount, getRedirectUri, requestOrigin } from "@/lib/auth";
 import { DATA_MODE_COOKIE } from "@/lib/demo-clock";
 
 /** Microsoft sends the user back here after sign-in. Errors return to the connect page with a reason. */
@@ -25,11 +25,13 @@ export async function GET(request: NextRequest) {
     const { accessToken, refreshToken } = await exchangeCodeForTokens(code, getRedirectUri(origin));
     const account = await fetchAccount(accessToken);
     const response = NextResponse.redirect(new URL("/connect?connected=1", origin));
-    response.headers.append("Set-Cookie", buildTokenCookie(refreshToken));
+    if (!refreshToken) return back("no_refresh_token");
+    for (const c of buildTokenCookies(refreshToken)) response.headers.append("Set-Cookie", c);
+    console.log(`Outlook connected: ${account.email ?? "unknown"}, token ${refreshToken.length} chars`);
     response.headers.append("Set-Cookie", buildAccountCookie(account));
-    response.cookies.set("oauth_state", "", { path: "/", maxAge: 0 });
+    response.headers.append("Set-Cookie", "oauth_state=; Path=/; Max-Age=0");
     // A fresh connection should show the real inbox
-    response.cookies.set(DATA_MODE_COOKIE, "live", { path: "/", maxAge: 60 * 60 * 24 * 365, sameSite: "lax" });
+    response.headers.append("Set-Cookie", `${DATA_MODE_COOKIE}=live; Path=/; Max-Age=${60 * 60 * 24 * 365}; SameSite=Lax`);
     return response;
   } catch (err) {
     console.error("Token exchange error:", err);
