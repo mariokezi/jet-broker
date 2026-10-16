@@ -2,6 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { format, parseISO } from "date-fns";
 import { DEMO_ANCHOR_COOKIE } from "@/lib/demo-clock";
 import { checklistTemplate, createSeedState, inquiryTripId, newId, STATE_VERSION, type AppState } from "@/lib/demo-state";
 import { matchOperators, simulateOperatorQuotes } from "@/lib/fleet";
@@ -13,6 +14,15 @@ import { createSeatShare, zoneSold } from "@/lib/seats";
 import { clientChannelId, simulatedClientReply, simulatedTeamReply, TEAMMATE, tripChannelId, type ChatMessage, type ChatVia } from "@/lib/messaging";
 import { clientIdFor, type ClientProfile } from "@/lib/clients";
 import type { AppAlert } from "@/lib/demo-seed-extra";
+import {
+  buildPortalQuote,
+  operatorAccount,
+  operatorByCompany,
+  OPERATOR_ACCOUNTS,
+  type AvailabilityBlock,
+  type FleetAircraft,
+  type RfqRequest,
+} from "@/lib/network";
 import type {
   ActivityItem,
   Booking,
@@ -31,6 +41,26 @@ function setAnchorCookie(anchorMs: number) {
 function readAnchorCookie(): number | null {
   const m = document.cookie.match(new RegExp(`(?:^|; )${DEMO_ANCHOR_COOKIE}=(\\d+)`));
   return m ? Number(m[1]) : null;
+}
+
+/** The newest state any window has written, or null when storage is unavailable. */
+function readStored(): AppState | null {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as AppState;
+    return parsed.version === STATE_VERSION ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeStored(state: AppState) {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  } catch {
+    // storage full or blocked: state still works for this window
+  }
 }
 
 function loadState(): AppState {
@@ -72,6 +102,16 @@ interface StoreApi {
   toggleNotifyClient: (bookingId: string) => void;
   dismissAlert: (id: string) => void;
   saveClient: (profile: ClientProfile) => void;
+  // Operator portal
+  saveAircraft: (aircraft: FleetAircraft) => void;
+  removeAircraft: (id: string) => void;
+  addBlock: (block: AvailabilityBlock) => void;
+  removeBlock: (id: string) => void;
+  markRequestSeen: (requestId: string, operatorId: string) => void;
+  submitPortalQuote: (requestId: string, operatorId: string, quote: { aircraftId: string; price: number; note: string | null }) => boolean;
+  declineRequest: (requestId: string, operatorId: string, note: string | null) => void;
+  postOperatorLeg: (operatorId: string, leg: EmptyLeg) => void;
+  respondToClaim: (legId: string, accept: boolean) => void;
 }
 
 const StoreContext = createContext<StoreApi | null>(null);
@@ -80,29 +120,52 @@ export function StoreProvider({ children, mode }: { children: React.ReactNode; m
   const router = useRouter();
   const [state, setState] = useState<AppState | null>(null);
   const [now, setNow] = useState(() => Date.now());
-  const loaded = useRef(false);
+  const stateRef = useRef<AppState | null>(null);
+
+  const adopt = useCallback(
+    (next: AppState) => {
+      const anchorChanged = stateRef.current?.anchorMs !== next.anchorMs;
+      stateRef.current = next;
+      setState(next);
+      if (anchorChanged && readAnchorCookie() !== next.anchorMs) {
+        setAnchorCookie(next.anchorMs);
+        router.refresh(); // server demo inbox must use the same anchor
+      }
+    },
+    [router]
+  );
 
   // Load once on the client
   useEffect(() => {
     const initial = loadState();
+    writeStored(initial);
     // eslint-disable-next-line react-hooks/set-state-in-effect -- hydrate from localStorage after mount
-    setState(initial);
-    loaded.current = true;
-    if (readAnchorCookie() !== initial.anchorMs) {
-      setAnchorCookie(initial.anchorMs);
-      router.refresh(); // server demo inbox must use the same anchor
-    }
-  }, [router]);
+    adopt(initial);
+  }, [adopt]);
 
-  // Persist
+  // Live sync: the broker workspace and operator portal can run in separate windows.
+  // Every write goes to storage, and other windows adopt it the moment it lands.
   useEffect(() => {
-    if (!state || !loaded.current) return;
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-    } catch {
-      // storage full or blocked: state still works for this session
-    }
-  }, [state]);
+    const onStorage = (e: StorageEvent) => {
+      if (e.key !== STORAGE_KEY) return;
+      const latest = readStored();
+      if (latest) adopt(latest);
+    };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, [adopt]);
+
+  // Read, change and write in one step against the newest stored state, so a change
+  // made in another window a moment ago is never overwritten.
+  const mutate = useCallback((fn: (s: AppState) => AppState) => {
+    const base = readStored() ?? stateRef.current;
+    if (!base) return;
+    const next = fn(base);
+    if (next === base) return;
+    stateRef.current = next;
+    setState(next);
+    writeStored(next);
+  }, []);
 
   // Clock tick drives streaming RFQ responses
   useEffect(() => {
@@ -113,16 +176,18 @@ export function StoreProvider({ children, mode }: { children: React.ReactNode; m
   // When every RFQ response for an inquiry has arrived, advance it to Quoted
   useEffect(() => {
     if (!state) return;
-    const ready = state.inquiries.filter((inq) => {
-      if (inq.status !== "Sourcing") return false;
-      const tripId = inquiryTripId(inq);
-      const quotes = tripId ? state.rfqQuotes[tripId] ?? [] : [];
-      return quotes.length > 0 && quotes.every((q) => Date.parse(q.receivedAt) <= now);
-    });
-    if (ready.length === 0) return;
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- derived status transition on clock tick
-    setState((s) =>
-      s && {
+    const readyIn = (s: AppState) =>
+      s.inquiries.filter((inq) => {
+        if (inq.status !== "Sourcing") return false;
+        const tripId = inquiryTripId(inq);
+        const quotes = tripId ? s.rfqQuotes[tripId] ?? [] : [];
+        return quotes.length > 0 && quotes.every((q) => Date.parse(q.receivedAt) <= now);
+      });
+    if (readyIn(state).length === 0) return;
+    mutate((s) => {
+      const ready = readyIn(s);
+      if (ready.length === 0) return s;
+      return {
         ...s,
         inquiries: s.inquiries.map((i) => (ready.some((r) => r.id === i.id) ? { ...i, status: "Quoted" } : i)),
         activity: [
@@ -133,25 +198,26 @@ export function StoreProvider({ children, mode }: { children: React.ReactNode; m
               id: newId("act"),
               at: new Date().toISOString(),
               kind: "quote" as const,
-              text: `${n} operator quotes parsed and ranked for ${r.clientName ?? "client"} (${getIATA(r.origin!)} to ${getIATA(r.destination!)})`,
+              text: `${n} operator quote${n === 1 ? "" : "s"} parsed and ranked for ${r.clientName ?? "client"} (${getIATA(r.origin!)} to ${getIATA(r.destination!)})`,
               href: `/trip/${tripId}`,
             };
           }),
           ...s.activity,
         ],
-      }
-    );
-  }, [now, state]);
+      };
+    });
+  }, [now, state, mutate]);
 
   // Demo network: the poster accepts a claim a few seconds after it is sent
   useEffect(() => {
     if (!state) return;
-    const accepted = state.emptyLegs.filter((l) => l.status === "Pending" && l.claim && Date.parse(l.claim.acceptAt) <= now);
-    if (accepted.length === 0) return;
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- simulated counterparty acceptance on clock tick
-    setState((s) => {
-      if (!s) return s;
+    const dueIn = (s: AppState) => s.emptyLegs.filter((l) => l.status === "Pending" && l.claim && Date.parse(l.claim.acceptAt) <= now);
+    if (dueIn(state).length === 0) return;
+    mutate((s) => {
+      const accepted = dueIn(s);
+      if (accepted.length === 0) return s;
       const at = new Date().toISOString();
+      const alerts: AppAlert[] = [];
       const bookings: Booking[] = [];
       const messages: LegMessage[] = [];
       const activity: ActivityItem[] = [];
@@ -194,6 +260,9 @@ export function StoreProvider({ children, mode }: { children: React.ReactNode; m
           text: `Empty leg ${getIATA(leg.origin)} to ${getIATA(leg.destination)} confirmed by ${leg.postedBy.company} for ${claim.clientName}. Margin $${(claim.clientPrice - leg.askingPrice).toLocaleString()}`,
           href: "/schedule",
         });
+        if (leg.operatorId) {
+          alerts.push({ id: newId("AL"), at, kind: "booking", text: `${leg.postedBy.company} confirmed your claim: ${getIATA(leg.origin)} to ${getIATA(leg.destination)} for ${claim.clientName}`, href: "/schedule", seen: false });
+        }
       }
       return {
         ...s,
@@ -202,22 +271,24 @@ export function StoreProvider({ children, mode }: { children: React.ReactNode; m
         bookings: [...bookings, ...s.bookings],
         inquiries: s.inquiries.map((i) => (bookedInquiries.has(i.id) ? { ...i, status: "Booked" } : i)),
         activity: [...activity, ...s.activity],
+        alerts: [...alerts, ...s.alerts].slice(0, 60),
       };
     });
-  }, [now, state]);
+  }, [now, state, mutate]);
 
   // Flight tracking: departure and landing alerts, team channel updates, and client texts
   useEffect(() => {
     if (!state) return;
-    const due = state.bookings.filter((b) => {
-      const st = flightStatus(b, now);
-      const t = b.tracking;
-      return (st.phase === "Departed" && !t?.departedAt) || (st.phase === "Landed" && !t?.landedAt);
-    });
-    if (due.length === 0) return;
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- flight phase transitions on clock tick
-    setState((s) => {
-      if (!s) return s;
+    const dueIn = (s: AppState) =>
+      s.bookings.filter((b) => {
+        const st = flightStatus(b, now);
+        const t = b.tracking;
+        return (st.phase === "Departed" && !t?.departedAt) || (st.phase === "Landed" && !t?.landedAt);
+      });
+    if (dueIn(state).length === 0) return;
+    mutate((s) => {
+      const due = dueIn(s);
+      if (due.length === 0) return s;
       const at = new Date(now).toISOString();
       const alerts: AppAlert[] = [];
       const messages: ChatMessage[] = [];
@@ -258,16 +329,13 @@ export function StoreProvider({ children, mode }: { children: React.ReactNode; m
       return {
         ...s,
         bookings: s.bookings.map((b) => updated.get(b.id) ?? b),
-        alerts: [...alerts, ...s.alerts].slice(0, 50),
+        alerts: [...alerts, ...s.alerts].slice(0, 60),
         messages: [...s.messages, ...messages],
         activity: [...activity, ...s.activity],
       };
     });
-  }, [now, state, mode]);
+  }, [now, state, mode, mutate]);
 
-  const mutate = useCallback((fn: (s: AppState) => AppState) => {
-    setState((s) => (s ? fn(s) : s));
-  }, []);
 
   const log = useCallback(
     (item: Omit<ActivityItem, "id" | "at">) =>
@@ -290,8 +358,12 @@ export function StoreProvider({ children, mode }: { children: React.ReactNode; m
         const simulate = mode === "demo";
         const tripId = inquiryTripId(inq);
         if (!tripId) return 0;
-        const operators = matchOperators(inq.origin!, inq.category ?? inq.estimate.recommended).length;
+        const category = inq.category ?? inq.estimate.recommended;
+        const portalCompanies = OPERATOR_ACCOUNTS.map((a) => a.company);
+        const emailed = matchOperators(inq.origin!, category).filter((op) => !portalCompanies.includes(op.name)).length;
+        const operators = emailed + OPERATOR_ACCOUNTS.length;
         const sentAt = Date.now();
+        const sentIso = new Date(sentAt).toISOString();
         const simulated = simulate
           ? simulateOperatorQuotes({
               seed: `${inq.id}-${tripId}`,
@@ -299,26 +371,62 @@ export function StoreProvider({ children, mode }: { children: React.ReactNode; m
               destination: inq.destination!,
               date: inq.date!,
               pax: inq.pax,
-              category: inq.category ?? inq.estimate.recommended,
+              category,
+              exclude: portalCompanies,
             }).map(({ quote, delayMs }) => ({ ...quote, receivedAt: new Date(sentAt + delayMs).toISOString() }))
           : [];
-        mutate((s) => ({
-          ...s,
-          inquiries: s.inquiries.map((i) =>
-            i.id === inquiryId ? { ...i, status: "Sourcing", rfqSentAt: new Date(sentAt).toISOString(), operatorsContacted: operators } : i
-          ),
-          rfqQuotes: simulate ? { ...s.rfqQuotes, [tripId]: simulated } : s.rfqQuotes,
-          activity: [
-            {
-              id: newId("act"),
-              at: new Date(sentAt).toISOString(),
-              kind: "rfq",
-              text: `RFQ sent to ${operators} matched operators for ${getIATA(inq.origin!)} to ${getIATA(inq.destination!)}`,
-              href: `/inquiries/${inq.id}`,
-            },
-            ...s.activity,
-          ],
-        }));
+        const route = `${getIATA(inq.origin!)} to ${getIATA(inq.destination!)}`;
+        mutate((s) => {
+          const request: RfqRequest = {
+            id: newId("RQ"),
+            tripId,
+            inquiryId,
+            origin: inq.origin!,
+            destination: inq.destination!,
+            date: inq.date!,
+            departureTime: normalizeTime(inq.departureTime ?? null),
+            pax: inq.pax,
+            category,
+            notes: inq.notes,
+            sentAt: sentIso,
+            broker: { name: s.settings.brokerName, company: s.settings.companyName },
+            to: OPERATOR_ACCOUNTS.map((a) => a.id),
+            responses: {},
+            seenBy: {},
+          };
+          // Keep answers operators already sent through the portal for this trip
+          const kept = (s.rfqQuotes[tripId] ?? []).filter((q) => q.quoteSource === "portal");
+          return {
+            ...s,
+            inquiries: s.inquiries.map((i) =>
+              i.id === inquiryId ? { ...i, status: "Sourcing", rfqSentAt: sentIso, operatorsContacted: operators } : i
+            ),
+            rfqQuotes: { ...s.rfqQuotes, [tripId]: [...kept, ...(simulate ? simulated : [])] },
+            rfqRequests: [request, ...s.rfqRequests.filter((r) => r.tripId !== tripId || Object.keys(r.responses).length > 0)],
+            alerts: [
+              ...OPERATOR_ACCOUNTS.map((a) => ({
+                id: newId("AL"),
+                at: sentIso,
+                kind: "request" as const,
+                text: `New RFQ from ${s.settings.companyName}: ${route} on ${format(parseISO(inq.date!), "EEE, MMM d")}${inq.pax ? `, ${inq.pax} pax` : ""}`,
+                href: `/operator/requests?r=${request.id}`,
+                seen: false,
+                audience: a.id,
+              })),
+              ...s.alerts,
+            ].slice(0, 60),
+            activity: [
+              {
+                id: newId("act"),
+                at: sentIso,
+                kind: "rfq",
+                text: `RFQ sent to ${operators} operators for ${route}, ${OPERATOR_ACCOUNTS.length} of them live on JetBroker Network`,
+                href: `/inquiries/${inq.id}`,
+              },
+              ...s.activity,
+            ],
+          };
+        });
         return operators;
       },
       setQuoteDecision: (quoteId, decision) =>
@@ -341,6 +449,20 @@ export function StoreProvider({ children, mode }: { children: React.ReactNode; m
       createBooking: (bk, quoteId) =>
         mutate((s) => ({
           ...s,
+          alerts: (() => {
+            const account = operatorByCompany(bk.operator);
+            if (!account) return s.alerts;
+            const alert: AppAlert = {
+              id: newId("AL"),
+              at: new Date().toISOString(),
+              kind: "booking",
+              text: `Booked: ${bk.clientName}, ${getIATA(bk.origin)} to ${getIATA(bk.destination)} on ${format(parseISO(bk.date), "MMM d")}${bk.tailNumber ? ` (${bk.tailNumber})` : ""}. $${bk.operatorPrice.toLocaleString()} to you`,
+              href: "/operator/calendar",
+              seen: false,
+              audience: account.id,
+            };
+            return [alert, ...s.alerts].slice(0, 60);
+          })(),
           bookings: [bk, ...s.bookings.filter((b) => b.tripId !== bk.tripId)],
           quoteDecisions: quoteId ? { ...s.quoteDecisions, [quoteId]: "Accepted" } : s.quoteDecisions,
           proposals: s.proposals[bk.tripId]
@@ -416,10 +538,25 @@ export function StoreProvider({ children, mode }: { children: React.ReactNode; m
                 ? {
                     ...l,
                     status: "Pending",
-                    claim: { ...claim, requestedAt: new Date(nowMs).toISOString(), acceptAt: new Date(nowMs + (mode === "demo" ? 4500 : 365 * 86_400_000)).toISOString() },
+                    // Portal operators confirm by hand; other posters are simulated in demo mode
+                    claim: { ...claim, requestedAt: new Date(nowMs).toISOString(), acceptAt: new Date(nowMs + (mode === "demo" && !l.operatorId ? 4500 : 365 * 86_400_000)).toISOString() },
                   }
                 : l
             ),
+            alerts: (() => {
+              const leg = s.emptyLegs.find((l) => l.id === legId);
+              if (!leg?.operatorId) return s.alerts;
+              const alert: AppAlert = {
+                id: newId("AL"),
+                at: new Date(nowMs).toISOString(),
+                kind: "claim",
+                text: `${s.settings.companyName} wants your ${getIATA(leg.origin)} to ${getIATA(leg.destination)} empty leg for ${claim.clientName}`,
+                href: `/operator/empty-legs?leg=${legId}`,
+                seen: false,
+                audience: leg.operatorId,
+              };
+              return [alert, ...s.alerts].slice(0, 60);
+            })(),
             legMessages: [
               ...s.legMessages,
               { id: newId("LM"), legId, at: new Date(nowMs).toISOString(), fromMe: true, author: s.settings.brokerName, text: `Claim request: I'd like to book this leg for ${claim.clientName}.` },
@@ -489,14 +626,123 @@ export function StoreProvider({ children, mode }: { children: React.ReactNode; m
       dismissAlert: (id) => mutate((s) => ({ ...s, alerts: s.alerts.map((a) => (a.id === id ? { ...a, seen: true } : a)) })),
       saveClient: (profile) =>
         mutate((s) => ({ ...s, clients: s.clients.some((c) => c.id === profile.id) ? s.clients.map((c) => (c.id === profile.id ? profile : c)) : [profile, ...s.clients] })),
+      saveAircraft: (aircraft) =>
+        mutate((s) => ({
+          ...s,
+          fleet: s.fleet.some((a) => a.id === aircraft.id) ? s.fleet.map((a) => (a.id === aircraft.id ? aircraft : a)) : [...s.fleet, aircraft],
+        })),
+      removeAircraft: (id) =>
+        mutate((s) => ({ ...s, fleet: s.fleet.filter((a) => a.id !== id), blocks: s.blocks.filter((b) => b.aircraftId !== id) })),
+      addBlock: (block) => mutate((s) => ({ ...s, blocks: [...s.blocks, block] })),
+      removeBlock: (id) => mutate((s) => ({ ...s, blocks: s.blocks.filter((b) => b.id !== id) })),
+      markRequestSeen: (requestId, operatorId) =>
+        mutate((s) => {
+          const r = s.rfqRequests.find((x) => x.id === requestId);
+          if (!r || r.seenBy[operatorId]) return s;
+          return { ...s, rfqRequests: s.rfqRequests.map((x) => (x.id === requestId ? { ...x, seenBy: { ...x.seenBy, [operatorId]: new Date().toISOString() } } : x)) };
+        }),
+      submitPortalQuote: (requestId, operatorId, input) => {
+        let ok = false;
+        mutate((s) => {
+          const r = s.rfqRequests.find((x) => x.id === requestId);
+          const account = operatorAccount(operatorId);
+          const aircraft = s.fleet.find((a) => a.id === input.aircraftId && a.operatorId === operatorId);
+          if (!r || !account || !aircraft || r.responses[operatorId] || !(input.price > 0)) return s;
+          ok = true;
+          const at = new Date().toISOString();
+          const quote = buildPortalQuote({ request: r, account, aircraft, price: Math.round(input.price), note: input.note, at });
+          const route = `${getIATA(r.origin)} to ${getIATA(r.destination)}`;
+          const inq = r.inquiryId ? s.inquiries.find((i) => i.id === r.inquiryId) : undefined;
+          return {
+            ...s,
+            rfqRequests: s.rfqRequests.map((x) =>
+              x.id === requestId
+                ? { ...x, responses: { ...x.responses, [operatorId]: { status: "Quoted" as const, at, quoteId: quote.emailId, aircraftId: aircraft.id, price: quote.price, note: input.note } } }
+                : x
+            ),
+            rfqQuotes: { ...s.rfqQuotes, [r.tripId]: [...(s.rfqQuotes[r.tripId] ?? []).filter((q) => q.emailId !== quote.emailId), quote] },
+            alerts: [
+              {
+                id: newId("AL"),
+                at,
+                kind: "quote" as const,
+                text: `${account.company} just quoted ${quote.priceFormatted} live: ${aircraft.model} (${aircraft.tail}) for ${inq?.clientName ?? "your client"}, ${route}`,
+                href: `/trip/${r.tripId}`,
+                seen: false,
+              },
+              ...s.alerts,
+            ].slice(0, 60),
+            activity: [
+              { id: newId("act"), at, kind: "quote", text: `${account.company} quoted ${quote.priceFormatted} through the operator portal for ${route} (${aircraft.model})`, href: `/trip/${r.tripId}` },
+              ...s.activity,
+            ],
+          };
+        });
+        return ok;
+      },
+      declineRequest: (requestId, operatorId, note) =>
+        mutate((s) => {
+          const r = s.rfqRequests.find((x) => x.id === requestId);
+          const account = operatorAccount(operatorId);
+          if (!r || !account || r.responses[operatorId]) return s;
+          const at = new Date().toISOString();
+          return {
+            ...s,
+            rfqRequests: s.rfqRequests.map((x) =>
+              x.id === requestId ? { ...x, responses: { ...x.responses, [operatorId]: { status: "Declined" as const, at, quoteId: null, aircraftId: null, price: null, note } } } : x
+            ),
+            activity: [
+              { id: newId("act"), at, kind: "rfq", text: `${account.company} declined ${getIATA(r.origin)} to ${getIATA(r.destination)}${note ? `: ${note}` : ""}`, href: r.inquiryId ? `/inquiries/${r.inquiryId}` : undefined },
+              ...s.activity,
+            ],
+          };
+        }),
+      postOperatorLeg: (operatorId, leg) =>
+        mutate((s) => {
+          const account = operatorAccount(operatorId);
+          if (!account) return s;
+          const posted: EmptyLeg = { ...leg, operatorId, isMine: false, postedBy: { name: account.contact, company: account.company, kind: "Operator" } };
+          const route = `${getIATA(leg.origin)} to ${getIATA(leg.destination)}`;
+          const at = new Date().toISOString();
+          return {
+            ...s,
+            emptyLegs: [posted, ...s.emptyLegs],
+            alerts: [
+              { id: newId("AL"), at, kind: "leg" as const, text: `New empty leg from ${account.company}: ${route}, ${leg.aircraft}, $${leg.askingPrice.toLocaleString()}`, href: `/empty-legs?leg=${leg.id}`, seen: false },
+              ...s.alerts,
+            ].slice(0, 60),
+            activity: [
+              { id: newId("act"), at, kind: "ops", text: `${account.company} posted an empty leg ${route} (${leg.aircraft}) from the operator portal`, href: `/empty-legs?leg=${leg.id}` },
+              ...s.activity,
+            ],
+          };
+        }),
+      respondToClaim: (legId, accept) =>
+        mutate((s) => {
+          const leg = s.emptyLegs.find((l) => l.id === legId);
+          if (!leg || leg.status !== "Pending" || !leg.claim) return s;
+          const at = new Date().toISOString();
+          if (accept) {
+            // The claim effect turns this into a booking on the next tick
+            return { ...s, emptyLegs: s.emptyLegs.map((l) => (l.id === legId ? { ...l, claim: { ...l.claim!, acceptAt: at } } : l)) };
+          }
+          return {
+            ...s,
+            emptyLegs: s.emptyLegs.map((l) => (l.id === legId ? { ...l, status: "Open", claim: null } : l)),
+            legMessages: [...s.legMessages, { id: newId("LM"), legId, at, fromMe: false, author: `${leg.postedBy.name}, ${leg.postedBy.company}`, text: "Sorry, we can't take this one after all. The leg is open again." }],
+            alerts: [
+              { id: newId("AL"), at, kind: "claim" as const, text: `${leg.postedBy.company} declined your claim on ${getIATA(leg.origin)} to ${getIATA(leg.destination)}`, href: `/empty-legs?leg=${legId}`, seen: false },
+              ...s.alerts,
+            ].slice(0, 60),
+          };
+        }),
       resetDemo: () => {
         const fresh = createSeedState(Date.now());
-        setAnchorCookie(fresh.anchorMs);
-        setState(fresh);
-        router.refresh();
+        writeStored(fresh);
+        adopt(fresh);
       },
     };
-  }, [state, now, mode, mutate, log, router]);
+  }, [state, now, mode, mutate, log, adopt]);
 
   return <StoreContext.Provider value={api}>{children}</StoreContext.Provider>;
 }

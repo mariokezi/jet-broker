@@ -27,7 +27,7 @@ export interface ParsedQuote {
   refurbExterior: string | null;
   totalHours: number | null;
   operator: string | null;
-  quoteSource: "inline" | "pdf" | "external";
+  quoteSource: "inline" | "pdf" | "external" | "portal";
   externalLink: string | null;
   status: "Accepted" | "Unanswered";
   receivedAt: string;

@@ -43,6 +43,16 @@ One-time setup:
 
 Company accounts may need their Microsoft 365 admin to approve the app once.
 
+## Operator Portal
+
+Operators sign in at `/operator/login` with their own account, separate from the broker password. They manage their fleet, block dates on a calendar, answer broker RFQs with quotes priced from their own hourly rates, see booked trips, and post empty legs. Quotes land on the broker's quote board instantly, tagged **Live via Network**.
+
+- Accounts: `mike@jetexcellence.example` (Jet Excellence) and `sales@premierpj.example` (Premier Private Jets), defined in `lib/network.ts`.
+- Password: set `OPERATOR_PASSWORD` in Vercel. It defaults to `fly2026`.
+- `/network` shows the broker workspace and the operator portal side by side for demos.
+
+Data lives in the browser (localStorage), so the broker and operator must use the same browser, in two windows or the split view. Windows stay in sync live. Moving to a shared database is the step that lets operators use it from their own computers.
+
 ## Adding New Airports
 
 Edit `lib/airport-lookup.ts` to add entries to the `airports` array. Each entry needs:

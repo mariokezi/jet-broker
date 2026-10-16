@@ -5,6 +5,7 @@ import { seedEmptyLegs, type EmptyLeg, type LegMessage } from "./empty-legs";
 import { seedClientProfiles, seedLiveBookings, seedMessages, seedSeatLegs, type AppAlert } from "./demo-seed-extra";
 import type { ChatMessage } from "./messaging";
 import type { ClientProfile } from "./clients";
+import { seedBlocks, seedFleet, seedNetwork, type AvailabilityBlock, type FleetAircraft, type RfqRequest } from "./network";
 import type {
   ActivityItem,
   Booking,
@@ -19,7 +20,7 @@ import type {
   QuoteDecision,
 } from "./types";
 
-export const STATE_VERSION = 6;
+export const STATE_VERSION = 7;
 
 export interface AppState {
   version: number;
@@ -37,6 +38,10 @@ export interface AppState {
   readAt: Record<string, string>; // channel id -> last read time
   clients: ClientProfile[];
   alerts: AppAlert[];
+  /** Operator network: fleets, blocked dates and RFQs sent to operators on the portal. */
+  fleet: FleetAircraft[];
+  blocks: AvailabilityBlock[];
+  rfqRequests: RfqRequest[];
   // Rolling 30 day counters before today's session, used for automation metrics
   history: { quotesParsed: number; inquiriesQualified: number; rfqsSent: number; proposalsSent: number; bookings: number };
 }
@@ -68,7 +73,9 @@ export function inquiryTripId(inq: Pick<InquiryFields, "origin" | "destination" 
 let counter = 0;
 export function newId(prefix: string): string {
   counter = (counter + 1) % 1000;
-  return `${prefix}-${Date.now().toString(36).toUpperCase().slice(-5)}${counter}`;
+  // A random tail keeps ids unique when two windows create records in the same millisecond
+  const tail = Math.floor(Math.random() * 36).toString(36).toUpperCase();
+  return `${prefix}-${Date.now().toString(36).toUpperCase().slice(-5)}${counter}${tail}`;
 }
 
 function makeInquiry(
@@ -230,6 +237,11 @@ sam.k@yahoo.com`
       pax: 6, operator: "Jet Excellence", aircraft: "Challenger 350", tailNumber: "N350JX",
       operatorPrice: 38900, clientPrice: 44200,
     }, ALL),
+    booking("BK-1192", anchorMs, 5, {
+      inquiryId: null, clientName: "Hannah Brooks", origin: "KPBI", destination: "KBOS", departureTime: "13:00",
+      pax: 5, operator: "Jet Excellence", aircraft: "Citation XLS+", tailNumber: "N560JX",
+      operatorPrice: 19800, clientPrice: 22900,
+    }, ["contract", "payment", "operator"]),
   ];
 
   const activity: ActivityItem[] = [
@@ -248,6 +260,29 @@ sam.k@yahoo.com`
   const me = { name: DEFAULT_SETTINGS.brokerName, company: DEFAULT_SETTINGS.companyName, kind: "Broker" as const };
   const network = seedEmptyLegs(anchorMs, me);
   network.legs.unshift(...seedSeatLegs(anchorMs, me));
+  const fleet = seedFleet();
+  const portal = seedNetwork(anchorMs, { name: DEFAULT_SETTINGS.brokerName, company: DEFAULT_SETTINGS.companyName }, fleet);
+  network.legs.unshift({
+    id: "EL-3120",
+    postedAt: at(4),
+    postedBy: { name: "Mike Rodriguez", company: "Jet Excellence", kind: "Operator" },
+    isMine: false,
+    origin: "KBOS",
+    destination: "KTEB",
+    earliest: d(5),
+    latest: d(6),
+    aircraft: "Citation XLS+",
+    category: "Midsize Jet",
+    seats: 8,
+    tailNumber: "N560JX",
+    askingPrice: 6200,
+    notes: "Empty return after a Palm Beach to Boston drop. Wifi, full catering available.",
+    status: "Open",
+    claim: null,
+    sourceBookingId: "BK-1192",
+    operatorId: "jet-excellence",
+    aircraftId: "AC-JX2",
+  });
   // Past flights already had their alerts; only flights in the demo window alert live
   for (const b of bookings) {
     if (b.date < d(0)) b.tracking = { departedAt: at(24), landedAt: at(23), notifyClient: false };
@@ -262,7 +297,7 @@ sam.k@yahoo.com`
     anchorMs,
     settings: DEFAULT_SETTINGS,
     inquiries,
-    rfqQuotes: {},
+    rfqQuotes: portal.quotes,
     quoteDecisions: {},
     proposals,
     bookings,
@@ -274,6 +309,9 @@ sam.k@yahoo.com`
     readAt: { "team-ops": at(2.7), "trip-BK-1191": at(0.9), "trip-BK-1190": at(25), "client-victoria-lane": at(20), "client-sophia-martinez": at(2.8) },
     clients: seedClientProfiles(anchorMs),
     alerts: [],
+    fleet,
+    blocks: seedBlocks(anchorMs),
+    rfqRequests: portal.requests,
     history: { quotesParsed: 286, inquiriesQualified: 74, rfqsSent: 61, proposalsSent: 39, bookings: 17 },
   };
 }

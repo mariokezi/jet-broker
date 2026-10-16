@@ -361,6 +361,11 @@ export function QuoteDetailTable({ quotes, selected, onToggleSelect, decisions, 
                       <span className="text-sm text-slate-600">
                         {quote.operator ?? <span className="text-slate-400">&mdash;</span>}
                       </span>
+                      {quote.quoteSource === "portal" && (
+                        <span className="mt-0.5 flex w-fit items-center gap-1 rounded-full bg-gold-100 px-1.5 py-0.5 text-[10px] font-semibold text-gold-700 whitespace-nowrap">
+                          <span className="h-1.5 w-1.5 rounded-full bg-gold-500" /> Live via Network
+                        </span>
+                      )}
                     </td>
                     <td className="px-3 py-3 text-slate-500 text-sm tabular-nums">
                       {format(parseISO(quote.receivedAt), "MM/dd HH:mm")}

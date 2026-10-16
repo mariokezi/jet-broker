@@ -39,6 +39,9 @@ export interface EmptyLeg {
   sourceBookingId: string | null;
   /** When set, the leg is sold by cabin zone or seat instead of as a whole aircraft. */
   seatShare?: SeatShare | null;
+  /** Posted from the operator portal: that operator confirms claims by hand. */
+  operatorId?: string | null;
+  aircraftId?: string | null;
 }
 
 export interface LegMessage {
