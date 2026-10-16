@@ -1,5 +1,6 @@
 "use client";
 
+import { NetworkRfqStatus } from "./network-rfq-status";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { format, parseISO } from "date-fns";
@@ -175,6 +176,10 @@ function Workspace({
           <Link href="/schedule" className="ml-auto text-emerald-700 hover:text-emerald-700 text-xs font-medium">Open in schedule</Link>
         </div>
       )}
+
+      <div className="mb-4">
+        <NetworkRfqStatus tripId={trip.tripId} />
+      </div>
 
       <div className="grid gap-6 min-[1700px]:grid-cols-[1fr_360px]">
         <div className="min-w-0">

@@ -1,5 +1,6 @@
 "use client";
 
+import { NetworkRfqStatus } from "./network-rfq-status";
 import Link from "next/link";
 import { useState } from "react";
 import { format, formatDistanceToNow, parseISO } from "date-fns";
@@ -237,9 +238,12 @@ function NextStep({
   }
 
   return (
-    <div className="rounded-xl border border-navy-200 bg-navy-50 px-4 py-3 flex items-center gap-3 flex-wrap text-sm">
-      <span className="text-[10px] uppercase tracking-wider text-navy-700 font-medium">Next step</span>
-      {body}
+    <div className="space-y-2">
+      <div className="rounded-xl border border-navy-200 bg-navy-50 px-4 py-3 flex items-center gap-3 flex-wrap text-sm">
+        <span className="text-[10px] uppercase tracking-wider text-navy-700 font-medium">Next step</span>
+        {body}
+      </div>
+      {tripId && inq.status !== "Booked" && <NetworkRfqStatus tripId={tripId} />}
     </div>
   );
 }

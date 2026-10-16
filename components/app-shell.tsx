@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
-import { LayoutDashboard, Inbox, Plane, CalendarDays, Settings, Plus, Menu, X, Repeat, Users, MessageSquare } from "lucide-react";
+import { LayoutDashboard, Inbox, Plane, CalendarDays, Settings, Plus, Menu, X, Repeat, Users, MessageSquare, Radio } from "lucide-react";
 import { DataModeToggle } from "./data-mode-toggle";
 import { EmailConnectionStatus } from "./email-connection-status";
 import { useStore } from "./store-provider";
@@ -23,7 +23,7 @@ const NAV = [
 ];
 
 // Routes that render without the broker chrome (client facing or auth)
-const BARE = [/^\/login/, /^\/proposal\//, /^\/request/, /^\/seats\//, /^\/connect/];
+const BARE = [/^\/login/, /^\/proposal\//, /^\/request/, /^\/seats\//, /^\/connect/, /^\/operator/, /^\/network/];
 
 export function AppShell({
   children,
@@ -98,6 +98,13 @@ export function AppShell({
         </Link>
         <div className="px-3 mb-2 text-[11px] font-medium uppercase tracking-wider text-slate-400">Workspace</div>
         <nav className="space-y-1">{navLinks()}</nav>
+        <Link
+          href="/network"
+          className="mt-4 flex items-center gap-3 rounded-xl border border-gold-200 bg-gold-50/70 px-3 py-2.5 text-sm font-medium text-navy-900 hover:border-gold-300 hover:bg-gold-50 transition-colors"
+        >
+          <Radio className="h-[18px] w-[18px] text-gold-600" />
+          Live network view
+        </Link>
 
         <div className="mt-auto space-y-3">
           <DataModeToggle mode={mode} outlookLinked={outlookLinked} />

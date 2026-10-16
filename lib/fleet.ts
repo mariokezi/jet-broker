@@ -101,7 +101,7 @@ export function categoryFromAircraft(aircraft: string | null): AircraftCategory 
 const FET_RATE = 0.075;
 const SEGMENT_FEE_PER_PAX = 5.5;
 
-function flightHours(distance: number, cruiseKts: number): number {
+export function flightHours(distance: number, cruiseKts: number): number {
   // Taxi, climb and descent overhead plus a winds allowance
   return Math.round((distance / cruiseKts + 0.35) * 10) / 10;
 }
@@ -215,6 +215,8 @@ export function simulateOperatorQuotes(params: {
   date: string;
   pax: number | null;
   category: AircraftCategory | null;
+  /** Operators on the network answer for themselves, so they are never simulated. */
+  exclude?: string[];
 }): SimulatedQuote[] {
   const rand = rng(params.seed);
   const distance = distanceNm(params.origin, params.destination) ?? 800;
@@ -222,7 +224,9 @@ export function simulateOperatorQuotes(params: {
   const estimate = estimateTrip(params.origin, params.destination, people);
   const target = params.category ?? estimate.recommended ?? "Midsize Jet";
   const targetIdx = CATEGORIES.findIndex((c) => c.category === target);
-  const operators = matchOperators(params.origin, target).slice(0, 8);
+  const operators = matchOperators(params.origin, target)
+    .filter((op) => !params.exclude?.includes(op.name))
+    .slice(0, 8);
   const count = Math.min(operators.length, 6 + Math.floor(rand() * 3));
   const results: SimulatedQuote[] = [];
   const route = `${getIATA(params.origin)}-${getIATA(params.destination)}`;

@@ -11,10 +11,12 @@ import type { Booking, BookingChecklistItem } from "./types";
 export interface AppAlert {
   id: string;
   at: string;
-  kind: "departed" | "landed" | "seat" | "message";
+  kind: "departed" | "landed" | "seat" | "message" | "quote" | "request" | "leg" | "claim" | "booking";
   text: string;
   href: string;
   seen: boolean;
+  /** Who sees it: the broker (default) or an operator portal account id. */
+  audience?: string;
 }
 
 function withSales(anchorMs: number, share: SeatShare, sales: [number, number, boolean, string, string | null, number][]): SeatShare {

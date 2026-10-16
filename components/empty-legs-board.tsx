@@ -211,6 +211,7 @@ function LegRow({ leg, active, matchCount, onClick }: { leg: EmptyLeg; active: b
           <div className="flex items-center gap-2 mt-1.5 text-[11px] text-slate-500">
             <PosterBadge kind={leg.postedBy.kind} />
             <span>{leg.isMine ? "You" : leg.postedBy.company}</span>
+            {leg.operatorId && <span className="rounded-full bg-gold-100 px-1.5 py-0.5 text-[10px] font-semibold text-gold-700">On Network</span>}
             <span>&middot; {formatDistanceToNow(parseISO(leg.postedAt), { addSuffix: true })}</span>
             {unread > 0 && <span className="text-navy-700">&middot; {unread} message{unread === 1 ? "" : "s"}</span>}
           </div>

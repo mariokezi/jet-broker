@@ -33,7 +33,16 @@ Reset demo data about 5 minutes before the call. Sophia Martinez is in the air H
 ## 10. Messages and clients (2 min)
 **Messages**: the ops room, a channel for each trip, and one thread per client with Email or Text replies. Message Richard Hale; he answers. **Clients** > a client for lifetime spend, trips (including shared flight seats), preferences and recent messages.
 
-## 11. Live inbox (optional)
+## 11. Operator portal: the live network (3 min, the wow moment)
+Click **Live network view** in the sidebar. The broker workspace is on the left and the operator portal is on the right. On the right, sign in as `mike@jetexcellence.example` (Jet Excellence) with the operator password (default `fly2026`).
+1. Right side: show **Fleet** (their jets, rates, availability) and **Calendar** (booked trips, maintenance blocks). Click an open day to block an aircraft.
+2. Left side: **New Inquiry** > Hot sample > **Save and send RFQ**. Within a second the right side pops a "New RFQ" alert.
+3. Right side: **Requests** > open it. The left side now shows "Jet Excellence is looking at it". The portal has already picked a free aircraft and priced it from their own hourly rate. Click **Send quote**.
+4. Left side: a gold "just quoted" alert, and the quote lands at the top of the board tagged **Live via Network**. No email, no parsing. Click **Book** on it.
+5. Right side: "Booked" alert, "You won this trip", and the trip is on their calendar.
+6. Bonus: on the right, **Empty Legs** > **Post return**. The left side gets the leg instantly. Claim Jet Excellence's Boston to Teterboro leg on the left; it waits until the operator clicks **Accept and book** on the right.
+
+## 12. Live inbox (optional)
 Toggle **Live inbox** only if Outlook is connected to an inbox you're comfortable showing.
 
-Note: in demo mode, operator RFQ responses and the other brokers on the Empty Legs network are simulated (the pages say so). Everything else, parsing, scoring, estimates, drafting, is the real pipeline.
+Note: in demo mode, RFQ responses from operators not on the portal and the other brokers on the Empty Legs network are simulated (the pages say so). Jet Excellence and Premier Private Jets answer through the operator portal for real. Everything else, parsing, scoring, estimates, drafting, is the real pipeline.
